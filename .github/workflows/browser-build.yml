@@ -1,0 +1,98 @@
+name: Browser build
+
+# Builds droidtop's browser from the composition the stable line names: Iceraven at the pinned commit
+# (plugin-line/lines/stable/line.json) with this plugin-core written over it, then droidtop/apply.sh, then
+# Iceraven's own build steps. The APKs are signed with the key derived from the droidtop root
+# (APK_KEYSTORE_*), the identity droidtop trusts the browser by.
+on:
+  push:
+    branches: [plugin-core, 'plugin/**', 'ci/**']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Android build
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Recipe
+        uses: actions/checkout@v5
+        with:
+          path: recipe
+
+      - name: Pinned upstream commit
+        id: pin
+        run: |
+          echo "commit=$(jq -r .upstream.commit recipe/plugin-line/lines/stable/line.json)" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r .version recipe/plugin-line/lines/stable/line.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Upstream
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.pin.outputs.commit }}
+          path: src
+          submodules: true
+
+      - name: Compose
+        run: |
+          rsync -a --exclude .git recipe/ src/
+          cd src && bash droidtop/apply.sh
+
+      - name: Java
+        uses: actions/setup-java@v5
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Android SDK and the NDK Gradle skips
+        working-directory: src
+        run: ./automation/iceraven/install-sdk.sh
+
+      - name: Iceraven's patches
+        working-directory: src
+        run: |
+          ./automation/iceraven/patch_android_components.sh
+          ./automation/iceraven/setup_venv.sh
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Build
+        working-directory: src
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs="-XX:MaxMetaspaceSize=4g -Xms1g -Xmx7g -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dev/stderr"
+        run: ./gradlew app:assembleForkRelease -PversionName=${{ steps.pin.outputs.version }}-dt.${{ github.run_number }} --stacktrace --no-daemon
+
+      - name: Sign
+        env:
+          KEYSTORE_B64: ${{ secrets.APK_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          tools=$(ls -d "$HOME"/android-sdk/android-sdk-linux/build-tools/* "${ANDROID_HOME:-/nonexistent}"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          ks="$RUNNER_TEMP/browser.p12"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$ks"
+          mkdir -p out
+          for abi in arm64-v8a x86_64; do
+            in=$(ls src/gradle/build/app/outputs/apk/forkRelease/app-$abi-forkRelease*.apk | head -1)
+            "$tools/zipalign" -f -p 4 "$in" "$RUNNER_TEMP/aligned.apk"
+            "$tools/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-pass env:KEYSTORE_PASSWORD \
+              --ks-key-alias "$KEY_ALIAS" --out "out/droidtop-browser-$abi.apk" "$RUNNER_TEMP/aligned.apk"
+            "$tools/apksigner" verify --print-certs "out/droidtop-browser-$abi.apk" | grep -E "Signer #1 certificate (DN|SHA-256)"
+          done
+          rm -f "$ks"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: droidtop-browser-${{ steps.pin.outputs.version }}-dt.${{ github.run_number }}
+          path: out/*.apk
+          if-no-files-found: error

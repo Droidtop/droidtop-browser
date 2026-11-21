@@ -1,0 +1,9 @@
+{
+  "upstream": {
+    "repo": "fork-maintainers/iceraven-browser",
+    "ref": "iceraven",
+    "commit": "978da479d4f95bafd4813bc0c68241fe93a1f25c"
+  },
+  "version": "160.0.1",
+  "sharedPatches": false
+}

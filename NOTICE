@@ -1,0 +1,12 @@
+droidtop Browser
+
+Based on Iceraven (https://github.com/fork-maintainers/iceraven-browser), itself based on Firefox for
+Android (Fenix) and Mozilla Android Components. Those are licensed under the Mozilla Public License 2.0;
+their files keep that licence and their notices.
+
+The files on this repository's plugin-core branch (droidtop's recipe) are copyright the droidtop
+contributors and licensed under the GNU General Public License, version 3 or later. The MPL 2.0 permits
+combining its files with GPL-licensed files (MPL 2.0, section 3.3).
+
+Firefox and Mozilla are trademarks of the Mozilla Foundation. This browser is not made or endorsed by
+Mozilla; droidtop/apply.sh replaces the Firefox name in the user interface.
