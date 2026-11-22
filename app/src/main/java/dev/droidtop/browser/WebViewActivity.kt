@@ -80,12 +80,18 @@ class WebViewActivity : Activity() {
 
     private fun start(asked: JSONObject) {
         request = asked
-        SessionCookies.whenReady(engine) {
-            SessionCookies.put(asked.optJSONObject("cookies") ?: JSONObject()) { put ->
-                if (!put) Log.w(DroidtopInterfaceService.TAG, "droidtop's session could not be put into the page")
-                if (!isFinishing) show(asked)
-            }
-        }
+        SessionCookies.whenReady(
+            engine,
+            ready = {
+                SessionCookies.put(asked.optJSONObject("cookies") ?: JSONObject()) { put ->
+                    if (!put) Log.w(DroidtopInterfaceService.TAG, "droidtop's session could not be put into the page")
+                    if (!isFinishing) show(asked)
+                }
+            },
+            // Without the cookie bridge the session could neither go in nor come back: droidtop is answered "nothing
+            // done" at once, rather than the person waiting on a page that never opens.
+            failed = { if (!isFinishing) finishWith(completed = false) },
+        )
     }
 
     private fun show(asked: JSONObject) {
