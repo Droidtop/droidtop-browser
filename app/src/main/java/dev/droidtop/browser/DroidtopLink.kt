@@ -12,6 +12,8 @@ import dev.droidtop.pluginhost.IAppInterfaceDoor
 import dev.droidtop.pluginhost.IPluginHostBroker
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
+import android.util.Log
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -30,6 +32,7 @@ object DroidtopLink {
 
     private const val DOOR_ACTION = "dev.droidtop.plugin.APP_INTERFACE_DOOR"
     private const val CONNECT_MS = 5_000L
+    private const val TAG = "DroidtopBrowser"
 
     @Volatile private var broker: IPluginHostBroker? = null
     @Volatile private var pluginId: String? = null
@@ -38,6 +41,7 @@ object DroidtopLink {
     private val arrived = lock.newCondition()
 
     internal fun connected(id: String, given: IPluginHostBroker) {
+        Log.i(TAG, "droidtop connected this browser as $id")
         pluginId = id
         broker = given
         lock.withLock { arrived.signalAll() }
@@ -56,7 +60,13 @@ object DroidtopLink {
      */
     fun ensureConnected(context: Context): Boolean {
         if (broker != null) return true
-        if (!isInstalled(context) || !knock(context)) return false
+        // Each step says how it went in droidtop's log: on the console the browser waited and gave up with nothing to
+        // say which step failed (2026-11-22).
+        if (!isInstalled(context)) {
+            Log.w(TAG, "droidtop is not installed, or not signed by the key this browser trusts")
+            return false
+        }
+        if (!knock(context)) return false
         val until = SystemClock.uptimeMillis() + CONNECT_MS
         lock.withLock {
             while (broker == null) {
@@ -65,6 +75,7 @@ object DroidtopLink {
                 arrived.await(left, TimeUnit.MILLISECONDS)
             }
         }
+        if (broker == null) Log.w(TAG, "droidtop opened its door but did not connect this browser in ${CONNECT_MS / 1000} s")
         return broker != null
     }
 
@@ -90,10 +101,29 @@ object DroidtopLink {
             override fun onServiceDisconnected(name: ComponentName?) {}
         }
         val intent = Intent(DOOR_ACTION).setPackage(DROIDTOP_PACKAGE)
-        if (!runCatching { context.bindService(intent, connection, Context.BIND_AUTO_CREATE) }.getOrDefault(false)) return false
+        // The connection's answer on a thread of its own, never the main thread, which Fenix may keep busy while it starts.
+        val bound = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                context.bindService(intent, Context.BIND_AUTO_CREATE, Executors.newSingleThreadExecutor(), connection)
+            } else {
+                context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+            }
+        }.onFailure { Log.w(TAG, "binding droidtop's door failed", it) }.getOrDefault(false)
+        if (!bound) {
+            Log.w(TAG, "droidtop's door could not be bound")
+            return false
+        }
         return try {
-            connected.await(CONNECT_MS, TimeUnit.MILLISECONDS)
-            door?.let { runCatching { IAppInterfaceDoor.Stub.asInterface(it).knock() }.getOrDefault(false) } ?: false
+            if (!connected.await(CONNECT_MS, TimeUnit.MILLISECONDS)) {
+                Log.w(TAG, "droidtop's door did not answer in ${CONNECT_MS / 1000} s")
+                return false
+            }
+            val opened = door?.let { binder ->
+                runCatching { IAppInterfaceDoor.Stub.asInterface(binder).knock() }
+                    .onFailure { Log.w(TAG, "knocking on droidtop's door failed", it) }.getOrDefault(false)
+            } ?: false
+            Log.i(TAG, if (opened) "droidtop opened its door" else "droidtop refused to connect this browser (is its plugin approved and on?)")
+            opened
         } finally {
             runCatching { context.unbindService(connection) }
         }
