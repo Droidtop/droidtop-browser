@@ -6,14 +6,27 @@
 
 let port = null;
 
+/* Connects to the app, and keeps trying every second until it is connected: the app registers its handler after this
+ * script starts, and a connectNative before that may throw or be dropped (on the console the port never opened, so the
+ * page waited forever, 2026-11-22). The first message says hello, so the app knows the port is live. */
 function connect() {
-  port = browser.runtime.connectNative("droidtop");
-  port.onMessage.addListener(onMessage);
-  port.onDisconnect.addListener(() => {
+  if (port) return;
+  try {
+    const opened = browser.runtime.connectNative("droidtop");
+    opened.onMessage.addListener(onMessage);
+    opened.onDisconnect.addListener((p) => {
+      console.log(`droidtop session: port closed ${(p && p.error && p.error.message) || ""}`);
+      if (port === opened) port = null;
+    });
+    port = opened;
+    port.postMessage({ hello: true });
+    console.log("droidtop session: port opened");
+  } catch (e) {
+    console.log(`droidtop session: connectNative failed: ${e}`);
     port = null;
-    setTimeout(connect, 1000);
-  });
+  }
 }
+setInterval(connect, 1000);
 
 function answer(id, ok, result, error) {
   if (port) port.postMessage({ id, ok, result: result || null, error: error || null });

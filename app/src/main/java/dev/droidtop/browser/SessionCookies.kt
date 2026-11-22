@@ -31,24 +31,40 @@ object SessionCookies {
     private val ids = AtomicInteger()
     private val main = Handler(Looper.getMainLooper())
 
-    /** Runs [ready] once the extension is installed, allowed in private tabs and connected. */
-    fun whenReady(engine: Engine, ready: () -> Unit) {
+    /** How long the extension has to install and connect before the page is given back (it hung on the console). */
+    private const val READY_MS = 10_000L
+
+    /**
+     * Runs [ready] once the extension is installed, allowed in private tabs and connected, or [failed] when that has
+     * not happened in [READY_MS]. Each step says how it went in the log: on the console (2026-11-22) the extension
+     * installed and the handler registered, but no port ever connected and the page waited forever with nothing said.
+     */
+    fun whenReady(engine: Engine, ready: () -> Unit, failed: () -> Unit) {
         if (port != null) return ready()
         waiting += ready
+        main.postDelayed({
+            if (waiting.remove(ready)) {
+                Log.w(DroidtopInterfaceService.TAG, "the session extension did not connect in ${READY_MS / 1000} s")
+                failed()
+            }
+        }, READY_MS)
         if (installing) return
         installing = true
         engine.installBuiltInWebExtension(
             id = ID,
             url = URL,
             onSuccess = { extension ->
+                Log.i(DroidtopInterfaceService.TAG, "the session extension is installed")
                 engine.setAllowedInPrivateBrowsing(
                     extension,
                     true,
                     onSuccess = { allowed ->
+                        Log.i(DroidtopInterfaceService.TAG, "the session extension may run in private tabs; waiting for its port")
                         allowed.registerBackgroundMessageHandler(
                             PORT,
                             object : MessageHandler {
                                 override fun onPortConnected(port: Port) {
+                                    Log.i(DroidtopInterfaceService.TAG, "the session extension connected")
                                     main.post { connected(port) }
                                 }
 
@@ -64,10 +80,16 @@ object SessionCookies {
                             },
                         )
                     },
-                    onError = { Log.w(DroidtopInterfaceService.TAG, "the session extension could not run in private tabs", it) },
+                    onError = {
+                        Log.w(DroidtopInterfaceService.TAG, "the session extension could not run in private tabs", it)
+                        installing = false
+                    },
                 )
             },
-            onError = { Log.w(DroidtopInterfaceService.TAG, "the session extension could not be installed", it) },
+            onError = {
+                Log.w(DroidtopInterfaceService.TAG, "the session extension could not be installed", it)
+                installing = false
+            },
         )
     }
 
