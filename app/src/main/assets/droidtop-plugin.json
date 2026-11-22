@@ -1,6 +1,6 @@
 {
   "id": "dev.droidtop.browser",
-  "origin": "droidtop",
+  "origin": "droidtop-browser",
   "label": "droidtop Browser",
   "version": "1",
   "kind": "app_interface",

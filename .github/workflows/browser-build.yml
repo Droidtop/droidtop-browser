@@ -10,7 +10,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: browser-build-${{ github.ref }}
@@ -116,3 +116,13 @@ jobs:
           name: droidtop-browser-${{ steps.pin.outputs.version }}-dt.${{ github.run_number }}
           path: out/*.apk
           if-no-files-found: error
+
+      # Every green build of plugin-core is a release, the one droidtop's "droidtop Browser" row installs and updates
+      # from (the newest release's droidtop-browser-<abi>.apk, checked against the certificate droidtop pins).
+      - name: Release
+        if: github.ref == 'refs/heads/plugin-core'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.pin.outputs.version }}-dt.${{ github.run_number }}
+        run: |
+          gh release create "$TAG" out/*.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"             --title "droidtop Browser $TAG"             --notes "Iceraven at $(jq -r .upstream.commit recipe/plugin-line/lines/stable/line.json | cut -c1-12) (Fenix ${{ steps.pin.outputs.version }}) with droidtop's recipe at ${GITHUB_SHA::12}."
