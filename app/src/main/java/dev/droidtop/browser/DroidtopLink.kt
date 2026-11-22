@@ -13,6 +13,8 @@ import dev.droidtop.pluginhost.IPluginHostBroker
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import org.json.JSONObject
 
 /**
@@ -31,12 +33,14 @@ object DroidtopLink {
 
     @Volatile private var broker: IPluginHostBroker? = null
     @Volatile private var pluginId: String? = null
-    private val arrived = Object()
+    /** Signalled when a broker arrives, so [ensureConnected] wakes at once rather than polling. */
+    private val lock = ReentrantLock()
+    private val arrived = lock.newCondition()
 
     internal fun connected(id: String, given: IPluginHostBroker) {
         pluginId = id
         broker = given
-        synchronized(arrived) { arrived.notifyAll() }
+        lock.withLock { arrived.signalAll() }
     }
 
     internal fun disconnected(id: String) {
@@ -54,11 +58,11 @@ object DroidtopLink {
         if (broker != null) return true
         if (!isInstalled(context) || !knock(context)) return false
         val until = SystemClock.uptimeMillis() + CONNECT_MS
-        synchronized(arrived) {
+        lock.withLock {
             while (broker == null) {
                 val left = until - SystemClock.uptimeMillis()
                 if (left <= 0) break
-                arrived.wait(left)
+                arrived.await(left, TimeUnit.MILLISECONDS)
             }
         }
         return broker != null
