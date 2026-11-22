@@ -1,0 +1,84 @@
+package dev.droidtop.browser
+
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.os.Binder
+import android.os.IBinder
+import android.os.ParcelFileDescriptor
+import android.util.Log
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.Surface
+import dev.droidtop.pluginhost.IPluginHostBroker
+import dev.droidtop.pluginhost.IPluginRuntime
+import dev.droidtop.pluginhost.IPluginRuntimeCallback
+import org.json.JSONObject
+
+/**
+ * droidtop Browser as one of droidtop's plugins: an `app_interface` plugin that provides `web.view` (droidtop
+ * docs/plugin-api.md 3 G3a). droidtop binds this with [ACTION] and hands over its broker; the pages themselves are
+ * started by droidtop as [WebViewActivity], which talks back through that broker. Only droidtop is answered.
+ */
+class DroidtopInterfaceService : Service() {
+    override fun onBind(intent: Intent): IBinder? = if (intent.action == ACTION) Runtime(applicationContext) else null
+
+    private class Runtime(private val context: Context) : IPluginRuntime.Stub() {
+        private fun caller(): Boolean = DroidtopLink.isDroidtop(context, Binder.getCallingUid()).also {
+            if (!it) Log.w(TAG, "refused a call from uid ${Binder.getCallingUid()}: not droidtop")
+        }
+
+        override fun registerCallback(callback: IPluginRuntimeCallback?) {}
+        override fun unregisterCallback(callback: IPluginRuntimeCallback?) {}
+        override fun loadPlugin(pluginId: String?, installDir: String?, entryClass: String?, rootApproved: Boolean, broker: IPluginHostBroker?) = false
+
+        override fun loadContained(
+            pluginId: String?,
+            manifestJson: String?,
+            files: Array<out ParcelFileDescriptor>?,
+            names: Array<out String>?,
+            broker: IPluginHostBroker?,
+        ): Boolean {
+            files?.forEach { runCatching { it.close() } }
+            if (!caller() || pluginId == null || broker == null) return false
+            DroidtopLink.connected(pluginId, broker)
+            return true
+        }
+
+        override fun reachability(): String? = null
+        override fun attachScreen(
+            pluginId: String?, entrypoint: String?, library: String?, surface: Surface?,
+            frames: ParcelFileDescriptor?, framesCapacity: Long, width: Int, height: Int, density: Float,
+        ): String? = null
+        override fun resizeScreen(pluginId: String?, width: Int, height: Int) {}
+        override fun inputToken(): Long = 0L
+        override fun screenTouch(token: Long, pluginId: String?, event: MotionEvent?) {}
+        override fun screenKey(token: Long, pluginId: String?, event: KeyEvent?) {}
+        override fun detachScreen(pluginId: String?) {}
+        override fun lastLoadError(pluginId: String?): String? = null
+
+        override fun unloadPlugin(pluginId: String?) {
+            if (caller() && pluginId != null) DroidtopLink.disconnected(pluginId)
+        }
+
+        override fun invoke(pluginId: String?, capability: String?, argsJson: String?): String =
+            error("UNSUPPORTED", "droidtop Browser answers only through handle")
+
+        // droidtop starts the browser's pages itself (WebViewActivity); there is no point call to answer.
+        override fun handle(pluginId: String?, envelopeJson: String?): String =
+            if (!caller()) error("PERMISSION_DENIED", "Only droidtop may call droidtop Browser here")
+            else error("UNSUPPORTED", "droidtop Browser shows pages droidtop starts; it answers no calls")
+
+        override fun startJob(pluginId: String?, capability: String?, argsJson: String?, jobId: String?) = false
+        override fun cancelJob(pluginId: String?, jobId: String?) {}
+        override fun attachRelay(pluginId: String?, name: String?, relay: IBinder?) {}
+    }
+
+    companion object {
+        const val ACTION = "dev.droidtop.plugin.APP_INTERFACE"
+        internal const val TAG = "DroidtopBrowser"
+
+        private fun error(code: String, message: String): String =
+            JSONObject().put("ok", false).put("error", JSONObject().put("code", code).put("message", message)).toString()
+    }
+}

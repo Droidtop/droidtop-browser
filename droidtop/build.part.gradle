@@ -1,0 +1,14 @@
+
+// droidtop Browser's plugin side (droidtop docs/plugin-api.md 3 G3a), appended by droidtop/apply.sh: droidtop's own
+// AIDL from Droidtop/lib-plugins (checked out at droidtop's pin by browser-build.yml) and the adapter's sources.
+android {
+    buildFeatures {
+        aidl = true
+    }
+    sourceSets {
+        main {
+            java.srcDirs += ['../droidtop/src']
+            aidl.srcDirs += ['../droidtop/vendor/lib-plugins/android/aidl']
+        }
+    }
+}

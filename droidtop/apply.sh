@@ -28,4 +28,29 @@ sed -i 's/Firefox/Droidtop Browser/g' "${strings[@]}"
 sed -i '/about_content/s/Mozilla/Droidtop/' "${strings[@]}"
 sed -i '/<string name="trackers_blocked_panel_categorical_num_trackers_blocked">/s/%s/%1$s/g; /<string name="trackers_blocked_panel_categorical_num_trackers_blocked">/s/%d/%2$d/g' "${strings[@]}"
 
+# The plugin side: droidtop's AIDL and the adapter's sources (build.part.gradle), its service and page activity
+# (AndroidManifest.part.xml), and droidtop's package made visible, since the browser checks droidtop's signature and
+# knocks on its door.
+manifest=app/src/main/AndroidManifest.xml
+need '</application>' "$manifest"
+need '<application' "$manifest"
+[ -d droidtop/vendor/lib-plugins/android/aidl ] || { echo "apply.sh: droidtop/vendor/lib-plugins is missing (browser-build.yml checks it out)" >&2; exit 1; }
+if ! grep -q 'dev.droidtop.browser.DroidtopInterfaceService' "$manifest"; then
+    cat droidtop/build.part.gradle >> "$gradle"
+    python3 - "$manifest" droidtop/AndroidManifest.part.xml <<'PY'
+import sys
+path, part = sys.argv[1], sys.argv[2]
+text = open(path, encoding="utf-8").read()
+block = open(part, encoding="utf-8").read()
+queries = '    <queries>\n        <package android:name="dev.droidtop.app" />\n    </queries>\n\n'
+start = text.index("<application")
+line = text.rfind("\n", 0, start) + 1
+text = text[:line] + queries + text[line:]
+end = text.rindex("</application>")
+line = text.rfind("\n", 0, end) + 1
+text = text[:line] + block + "\n" + text[line:]
+open(path, "w", encoding="utf-8").write(text)
+PY
+fi
+
 echo "apply.sh: dev.droidtop.browser ready"

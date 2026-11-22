@@ -1,0 +1,22 @@
+{
+  "id": "dev.droidtop.browser",
+  "origin": "droidtop",
+  "label": "droidtop Browser",
+  "version": "1",
+  "kind": "app_interface",
+  "contractVersion": 3,
+  "minDroidtop": "0.2",
+  "app": {
+    "package": "dev.droidtop.browser",
+    "service": "dev.droidtop.browser.DroidtopInterfaceService"
+  },
+  "provides": [
+    {
+      "point": "web.view",
+      "version": 1,
+      "id": "browser",
+      "label": "droidtop Browser"
+    }
+  ],
+  "permissions": []
+}

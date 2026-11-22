@@ -40,6 +40,14 @@ jobs:
           path: src
           submodules: true
 
+      # droidtop's plugin AIDL, at the commit droidtop itself pins (droidtop's vendor/lib-plugins).
+      - name: droidtop's plugin interface
+        uses: actions/checkout@v5
+        with:
+          repository: Droidtop/lib-plugins
+          ref: a95fc7b4cf6196eaec9dc29b4b16db6154d5a6af
+          path: src/droidtop/vendor/lib-plugins
+
       - name: Compose
         run: |
           rsync -a --exclude .git recipe/ src/

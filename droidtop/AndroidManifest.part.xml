@@ -1,0 +1,22 @@
+        <!-- droidtop Browser's plugin side (droidtop docs/plugin-api.md 3 G3a): droidtop binds this service and hands over
+             its broker; only droidtop is answered. Inserted by droidtop/apply.sh. -->
+        <service
+            android:name="dev.droidtop.browser.DroidtopInterfaceService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="dev.droidtop.plugin.APP_INTERFACE" />
+            </intent-filter>
+        </service>
+
+        <!-- A page droidtop asks the browser to show: a sign-in, a browser check or a download page, by one-use token. -->
+        <activity
+            android:name="dev.droidtop.browser.WebViewActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity="dev.droidtop.browser.webview"
+            android:configChanges="keyboard|keyboardHidden|mcc|mnc|orientation|screenSize|layoutDirection|smallestScreenSize|screenLayout|uiMode|density">
+            <intent-filter>
+                <action android:name="dev.droidtop.pluginhost.action.WEB_VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
