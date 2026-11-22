@@ -27,6 +27,15 @@ jobs:
         with:
           path: recipe
 
+      # The adapter against droidtop's web.view contract (docs/contracts/web-view.json at the droidtop commit in
+      # droidtop/droidtop.pin), before the long build: droidtop checks its own side against the same file.
+      - name: web.view contract
+        run: |
+          set -eu
+          pin=$(tr -d ' \n\r' < recipe/droidtop/droidtop.pin)
+          curl -fsSL "https://raw.githubusercontent.com/Droidtop/droidtop/$pin/docs/contracts/web-view.json" -o "$RUNNER_TEMP/web-view.json"
+          python3 -I recipe/droidtop/check_contract.py "$RUNNER_TEMP/web-view.json" recipe
+
       - name: Pinned upstream commit
         id: pin
         run: |
