@@ -25,6 +25,8 @@ sed -i 's#io.github.forkmaintainers.iceraven.sharedID#dev.droidtop.browser.share
 # Name. Iceraven's own CI does the same with its name; Mozilla's trademarks stay out of a fork's UI.
 strings=(app/src/*/res/values*/*strings.xml)
 sed -i 's/Firefox/Droidtop Browser/g' "${strings[@]}"
+# Iceraven's own name is the fork build's app name (the console listed the app as "Iceraven", 2026-11-22).
+sed -i 's/Iceraven/droidtop Browser/g' "${strings[@]}"
 sed -i '/about_content/s/Mozilla/Droidtop/' "${strings[@]}"
 sed -i '/<string name="trackers_blocked_panel_categorical_num_trackers_blocked">/s/%s/%1$s/g; /<string name="trackers_blocked_panel_categorical_num_trackers_blocked">/s/%d/%2$d/g' "${strings[@]}"
 
@@ -35,6 +37,10 @@ manifest=app/src/main/AndroidManifest.xml
 need '</application>' "$manifest"
 need '<application' "$manifest"
 [ -d droidtop/vendor/lib-plugins/android/aidl ] || { echo "apply.sh: droidtop/vendor/lib-plugins is missing (browser-build.yml checks it out)" >&2; exit 1; }
+[ -f app/src/main/java/dev/droidtop/browser/WebViewActivity.kt ] || { echo "apply.sh: the adapter's sources are missing from app/src/main/java" >&2; exit 1; }
+# droidtop's AIDL where the build compiles AIDL by default (see build.part.gradle).
+mkdir -p app/src/main/aidl
+cp -R droidtop/vendor/lib-plugins/android/aidl/. app/src/main/aidl/
 if ! grep -q 'dev.droidtop.browser.DroidtopInterfaceService' "$manifest"; then
     cat droidtop/build.part.gradle >> "$gradle"
     python3 - "$manifest" droidtop/AndroidManifest.part.xml <<'PY'

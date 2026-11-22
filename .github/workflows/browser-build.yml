@@ -78,6 +78,24 @@ jobs:
           GRADLE_OPTS: -Dorg.gradle.jvmargs="-XX:MaxMetaspaceSize=4g -Xms1g -Xmx7g -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dev/stderr"
         run: ./gradlew app:assembleForkRelease -PversionName=${{ steps.pin.outputs.version }}-dt.${{ github.run_number }} --stacktrace --no-daemon
 
+      # The adapter must be in the APK, not just its manifest entries: the first releases built green without it and
+      # crashed with ClassNotFoundException when droidtop opened a page (2026-11-22).
+      - name: Check the adapter is in the APK
+        run: |
+          for apk in src/gradle/build/app/outputs/apk/forkRelease/app-*-forkRelease*.apk; do
+            python3 -I - "$apk" <<'PY'
+          import sys, zipfile
+          z = zipfile.ZipFile(sys.argv[1])
+          dex = b"".join(z.read(n) for n in z.namelist() if n.endswith(".dex"))
+          need = [b"Ldev/droidtop/browser/WebViewActivity;", b"Ldev/droidtop/browser/DroidtopInterfaceService;",
+                  b"dev.droidtop.pluginhost.IPluginRuntime"]
+          missing = [n.decode() for n in need if n not in dex]
+          if missing:
+              sys.exit(f"{sys.argv[1]}: missing {missing}")
+          print(f"{sys.argv[1]}: adapter present")
+          PY
+          done
+
       - name: Sign
         env:
           KEYSTORE_B64: ${{ secrets.APK_KEYSTORE_BASE64 }}

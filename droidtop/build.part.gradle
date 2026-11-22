@@ -1,14 +1,10 @@
 
-// droidtop Browser's plugin side (droidtop docs/plugin-api.md 3 G3a), appended by droidtop/apply.sh: droidtop's own
-// AIDL from Droidtop/lib-plugins (checked out at droidtop's pin by browser-build.yml) and the adapter's sources.
+// droidtop Browser's plugin side (droidtop docs/plugin-api.md 3 G3a), appended by droidtop/apply.sh. Its sources are
+// in app/src/main/java/dev/droidtop/browser and droidtop's AIDL is copied into app/src/main/aidl, the folders the
+// build compiles by default: with AGP 9's built-in Kotlin, an extra java.srcDirs folder was not compiled at all, and the
+// first builds shipped the manifest entries without the classes (ClassNotFoundException on the console, 2026-11-22).
 android {
     buildFeatures {
         aidl = true
-    }
-    sourceSets {
-        main {
-            java.srcDirs += ['../droidtop/src']
-            aidl.srcDirs += ['../droidtop/vendor/lib-plugins/android/aidl']
-        }
     }
 }
