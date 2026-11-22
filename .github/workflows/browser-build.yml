@@ -78,6 +78,21 @@ jobs:
           ./automation/iceraven/patch_android_components.sh
           ./automation/iceraven/setup_venv.sh
 
+      # Firefox's WebCompat extension (site fixes Gecko needs), at the Firefox tag matching the build, where
+      # feature-webcompat looks for it: the source under browser/extensions/webcompat, the build-time files under
+      # mobile/android/webcompat_addon_generated_files. Iceraven ships without it (droidtop/webcompat.py says why).
+      - name: Firefox's WebCompat extension
+        working-directory: src
+        run: |
+          tag="FIREFOX-ANDROID_$(tr . _ < version.txt | tr -d '\n')_RELEASE"
+          git clone -q --depth 1 --filter=blob:none --sparse --branch "$tag" https://github.com/mozilla-firefox/firefox.git "$RUNNER_TEMP/firefox"
+          git -C "$RUNNER_TEMP/firefox" sparse-checkout set --no-cone 'browser/extensions/webcompat/*'
+          mkdir -p browser/extensions
+          cp -R "$RUNNER_TEMP/firefox/browser/extensions/webcompat" browser/extensions/webcompat
+          python3 -m venv "$RUNNER_TEMP/webcompat-venv"
+          "$RUNNER_TEMP/webcompat-venv/bin/pip" install -q jsonschema
+          "$RUNNER_TEMP/webcompat-venv/bin/python" droidtop/webcompat.py browser/extensions/webcompat mobile/android/webcompat_addon_generated_files
+
       - name: Gradle
         uses: gradle/actions/setup-gradle@v5
 
@@ -89,7 +104,7 @@ jobs:
 
       # The adapter must be in the APK, not just its manifest entries: the first releases built green without it and
       # crashed with ClassNotFoundException when droidtop opened a page (2026-11-22).
-      - name: Check the adapter is in the APK
+      - name: Check the adapter and the WebCompat extension are in the APK
         run: |
           for apk in src/gradle/build/app/outputs/apk/forkRelease/app-*-forkRelease*.apk; do
             python3 -I - "$apk" <<'PY'
@@ -99,9 +114,15 @@ jobs:
           need = [b"Ldev/droidtop/browser/WebViewActivity;", b"Ldev/droidtop/browser/DroidtopInterfaceService;",
                   b"dev.droidtop.pluginhost.IPluginRuntime"]
           missing = [n.decode() for n in need if n not in dex]
+          # Firefox's WebCompat extension, which the first releases shipped without (NS_ERROR_FILE_NOT_FOUND on load).
+          names = set(z.namelist())
+          missing += [n for n in ("assets/extensions/webcompat/manifest.json", "assets/extensions/webcompat/run.js")
+                      if n not in names]
+          if not any(n.startswith("assets/extensions/webcompat/injections/generated/") for n in names):
+              missing.append("assets/extensions/webcompat/injections/generated/")
           if missing:
               sys.exit(f"{sys.argv[1]}: missing {missing}")
-          print(f"{sys.argv[1]}: adapter present")
+          print(f"{sys.argv[1]}: adapter and WebCompat extension present")
           PY
           done
 
