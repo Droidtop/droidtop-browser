@@ -76,17 +76,29 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
         run: |
-          set -euo pipefail
-          tools=$(ls -d "$HOME"/android-sdk/android-sdk-linux/build-tools/* "${ANDROID_HOME:-/nonexistent}"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          set -eu
+          # The newest build-tools of whichever SDK has them: Iceraven's own (install-sdk.sh) or the runner's.
+          tools=""
+          for sdk in "$HOME/android-sdk/android-sdk-linux" "${ANDROID_HOME:-}"; do
+            if [ -n "$sdk" ] && [ -d "$sdk/build-tools" ]; then
+              tools=$(find "$sdk/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+              [ -n "$tools" ] && break
+            fi
+          done
+          [ -n "$tools" ] || { echo "no Android build-tools found"; exit 1; }
+          echo "build-tools: $tools"
+          ls -l src/gradle/build/app/outputs/apk/forkRelease/
           ks="$RUNNER_TEMP/browser.p12"
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$ks"
           mkdir -p out
           for abi in arm64-v8a x86_64; do
-            in=$(ls src/gradle/build/app/outputs/apk/forkRelease/app-$abi-forkRelease*.apk | head -1)
+            in=$(find src/gradle/build/app/outputs/apk/forkRelease -maxdepth 1 -name "app-$abi-forkRelease*.apk" | head -n 1)
+            [ -n "$in" ] || { echo "no $abi APK was built"; exit 1; }
             "$tools/zipalign" -f -p 4 "$in" "$RUNNER_TEMP/aligned.apk"
             "$tools/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-pass env:KEYSTORE_PASSWORD \
               --ks-key-alias "$KEY_ALIAS" --out "out/droidtop-browser-$abi.apk" "$RUNNER_TEMP/aligned.apk"
-            "$tools/apksigner" verify --print-certs "out/droidtop-browser-$abi.apk" | grep -E "Signer #1 certificate (DN|SHA-256)"
+            "$tools/apksigner" verify --print-certs "out/droidtop-browser-$abi.apk" > "$RUNNER_TEMP/certs.txt"
+            grep -E "Signer #1 certificate (DN|SHA-256)" "$RUNNER_TEMP/certs.txt" || cat "$RUNNER_TEMP/certs.txt"
           done
           rm -f "$ks"
 
