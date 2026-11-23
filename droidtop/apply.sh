@@ -36,11 +36,11 @@ sed -i '/<string name="trackers_blocked_panel_categorical_num_trackers_blocked">
 manifest=app/src/main/AndroidManifest.xml
 need '</application>' "$manifest"
 need '<application' "$manifest"
-[ -d droidtop/vendor/lib-plugins/android/aidl ] || { echo "apply.sh: droidtop/vendor/lib-plugins is missing (browser-build.yml checks it out)" >&2; exit 1; }
+[ -d droidtop/vendor/mytop-plugins/android/aidl ] || { echo "apply.sh: droidtop/vendor/mytop-plugins is missing (browser-build.yml checks it out)" >&2; exit 1; }
 [ -f app/src/main/java/dev/droidtop/browser/WebViewActivity.kt ] || { echo "apply.sh: the adapter's sources are missing from app/src/main/java" >&2; exit 1; }
 # droidtop's AIDL where the build compiles AIDL by default (see build.part.gradle).
 mkdir -p app/src/main/aidl
-cp -R droidtop/vendor/lib-plugins/android/aidl/. app/src/main/aidl/
+cp -R droidtop/vendor/mytop-plugins/android/aidl/. app/src/main/aidl/
 if ! grep -q 'dev.droidtop.browser.DroidtopInterfaceService' "$manifest"; then
     cat droidtop/build.part.gradle >> "$gradle"
     python3 - "$manifest" droidtop/AndroidManifest.part.xml <<'PY'
