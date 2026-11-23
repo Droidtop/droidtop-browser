@@ -32,7 +32,7 @@ jobs:
       - name: web.view contract
         run: |
           set -eu
-          pin=$(tr -d ' \n\r' < recipe/mytop-project/droidtop.pin)
+          pin=$(tr -d ' \n\r' < recipe/droidtop/droidtop.pin)
           curl -fsSL "https://raw.githubusercontent.com/mytop-project/droidtop/$pin/docs/contracts/web-view.json" -o "$RUNNER_TEMP/web-view.json"
           python3 -I recipe/droidtop/check_contract.py "$RUNNER_TEMP/web-view.json" recipe
 
