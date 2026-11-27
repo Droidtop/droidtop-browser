@@ -1,0 +1,53 @@
+# Hidden Gecko document capability: source review and implementation boundary
+
+2026-11-27. This is a bounded static design review, not an implemented or advertised capability. No local build or live app/device tests were run. The visible surface candidate is separate and unchanged. Source references below pin Mozilla's `FIREFOX-ANDROID_160_0_RELEASE`, matching the Browser line's 160.0.1 engine family.
+
+## Host gap
+
+Droidtop's `PluginBrokers` still routes `webFetch` to `WebFetch.fetch` and hidden opens to `HiddenWebSession.open`, both system WebView implementations. `HostNetApis.request` uses the hidden fetch for challenged GETs after `hopCheck` and `reach`, but its old callback drops the requesting record and redirect authorization callback. A null hidden result can fall through to HTTP. Reusing cookies and user agent across these engines does not establish equal browser/network fingerprints or solve challenge execution on an obsolete system WebView.
+
+`WebFetch` currently returns a bounded document answer after allowing scripts to settle; `HiddenWebSession` has constrained PERSON/EXPIRED/HANDOFF/DOWNLOAD outcomes. These are separate requirements from the visible `web.view` surface. Store OAuth and key panes are also separate capabilities; they must not be represented as arbitrary script access through this GET boundary.
+
+## Agreed future contract, not yet provided
+
+The proposed named relay is `web.hidden.v1`, with a separately negotiated `web.document.get.v1` capability and API 30 minimum for a real GeckoView hosted by SCVH. `IWebHiddenHost` is mixed Binder: connected(provider, capabilities), one-use takeRequest(token), authorize(token, url, kind), result(token, bounded metadata), unavailable(token, reason). Provider operations are start(token), one-use body(token) returning a reliable PFD pipe, and cancel(token).
+
+The immutable GET request contains only op, HTTPS URL, cookies for the initial host, maxBytes at most 128 KiB, and a remaining deadline at most 30 seconds. No caller scripts, selectors, request bodies or arbitrary header bridge. Unsupported custom credential headers must fail explicitly. Authorize rechecks current plugin NetScope, DNS and local-network permissions for document, frame, resource and redirect hops before dispatch. There are no Cloudflare/CDN exceptions. Missing dependency permissions are an explicit outcome.
+
+After takeRequest, failures are terminal and cannot silently retry via HTTP/system WebView. A document result must be untruncated, with an independently authorized final URL, bounded metadata, exact body length and reliable-pipe EOF/error checks. Oversized HTML or JSON is failure, never success containing partial syntax. At most four operations globally. hiddenOpen needs a distinct capability and its existing user-driven browsing policy; blindly imposing net.http scope on visible file-host navigation would change that behavior.
+
+Draft interfaces/contract were coordinated with the host agent; no canonical API files or provider implementation were added by this review. The capability must remain unadvertised until the network boundary below is resolved.
+
+## Supported pieces verified in pinned source
+
+- `GeckoSession.NavigationDelegate.onLoadRequest` returns an asynchronous GeckoResult of AllowOrDeny. Its LoadRequest documentation explicitly describes a second callback for an HTTP redirect target. `onSubframeLoadRequest` handles subframes. These are navigation controls, not proof of all network traffic interception.
+- A privileged built-in extension can identify a tab's native browser/context through Firefox Android's `ext-android.js` TabManager and inject a packaged fixed script with `ext-tabs.js` executeScript. Exact generated context matching is required before extraction; no caller-provided tab ID or script is accepted.
+- HTTP channels can be guarded by exact `loadInfo.originAttributes`, including tabless requests. `nsHttpChannel::ContinuePrepareToConnect` calls the modify-request observers and then waits for resume before OnBeforeConnect. Suspending an owned hidden-context channel, authorizing off-thread, and pairing every path with resume/cancel is a plausible pre-connect HTTP guard. Every deadline, port loss and queue overflow must fail closed. A distinct `droidtop-hidden-UUID` namespace prevents unknown/closed hidden contexts from blocking visible `droidtop-UUID` sessions.
+- Public WebExtension onBeforeRequest supports asynchronous blocking Promises, but its public tab/cookie-store fields cannot alone establish exact Gecko context for tabless workers. A tab-only filter must not be presented as complete confinement.
+- Raw `GeckoWebExecutor` has anonymous/private/no-redirect flags and bounded fetch wrappers, but no per-session context ID and no JavaScript challenge execution. Its private flag is a shared private cookie jar. It is not a substitute for the scoped rendered-document requirement.
+
+## Current blocker: speculative connections escape the HTTP guard
+
+Gecko's per-docshell [allowDNSPrefetch](https://github.com/mozilla-firefox/firefox/blob/FIREFOX-ANDROID_160_0_RELEASE/docshell/base/nsIDocShell.idl#L192) controls DNS prefetch for its subtree starting with the next document. It does not establish preconnect confinement.
+
+[`Document::MaybePreconnect`](https://github.com/mozilla-firefox/firefox/blob/FIREFOX-ANDROID_160_0_RELEASE/dom/base/Document.cpp#L13724) checks only the global `network_preconnect` preference and directly calls SpeculativeConnectWithOriginAttributesNative. It does not test the document's DNS-prefetch flag and does not create an HTTP request for the proposed observer to suspend. [HTTP 103 early hints](https://github.com/mozilla-firefox/firefox/blob/FIREFOX-ANDROID_160_0_RELEASE/netwerk/protocol/http/EarlyHintsService.cpp#L92) can also initiate EarlyHintPreconnect with the channel's origin attributes.
+
+The [speculative-connect observation](https://github.com/mozilla-firefox/firefox/blob/FIREFOX-ANDROID_160_0_RELEASE/netwerk/protocol/http/nsHttpHandler.cpp#L2580) is a debug notification with a null subject, followed by the connection-manager path; it is not a cancellable per-context authorization hook. No supported GeckoSession per-context preconnect control was found in the pinned API. Changing Browser-wide networking preferences would affect the user's ordinary browser and is outside the approved solution.
+
+Consequently, a namespace-scoped HTTP observer plus navigation guard is insufficient to claim the required NetScope/DNS/local-network confinement for a rendering hidden provider. A sound next step needs either an engine-supported per-context speculation policy or a separately owned engine process/profile whose networking controls cannot affect ordinary Browser tabs. That larger runtime architecture is not silently introduced here. A separate-process profile must also prove single-runtime ownership, private cookie isolation, bounded resources and lifecycle safety.
+
+There is an additional non-HTTP review item: GeckoView's [permission process actor](https://github.com/mozilla-firefox/firefox/blob/FIREFOX-ANDROID_160_0_RELEASE/mobile/shared/actors/GeckoViewPermissionProcessChild.sys.mjs#L50) permits peer-connection requests. Do not claim an HTTP channel observer constrains WebRTC data-channel traffic. Per-context controls would need verification before any broader all-network isolation claim.
+
+## JSON fidelity requirement
+
+Firefox's [JSON converter](https://github.com/mozilla-firefox/firefox/blob/FIREFOX-ANDROID_160_0_RELEASE/devtools/client/jsonview/converter-child.js#L98) changes JSON document content type to text/html, assigns a resource principal, and constructs a JSON viewer application. A fixed body.innerText extractor could therefore return viewer UI rather than original JSON. The hidden capability needs a context-scoped raw response capture for JSON (for example a verified bounded stream tap before viewer conversion) or another demonstrated per-context bypass. It must preserve original bytes/text, including compression/encoding behavior, and refuse overflow. A global JSON-viewer preference change is not an acceptable workaround.
+
+Required coverage includes genuine JSON, an HTML challenge followed by JSON, same-site and off-scope redirects, denied/private-network resources, speculative preconnect and early hints, large HTML/JSON, worker requests, port loss, cancellation and exact EOF/error handling. Mock policy tests cannot substitute for pinned Gecko integration and rig evidence.
+
+## Other web panes to inventory next
+
+- `app/.../StoreSignInActivity.kt` owns WebPage OAuth navigation callbacks, trusted store return-page scripts/cookie capture, and a separate Steam account/QR flow. A typed OAuth capability should return only a validated redirect/code (or explicitly typed cookie result), with state/PKCE and host-owned parsing. It must not accept the existing arbitrary script string as a plugin API field.
+- `app/.../KeyWebPane.kt` owns service-specific WebView profiles, optional stay-signed-in behavior, configured capture pages and periodic key extraction. A future typed key-page capability needs an allowlisted service/capture schema, host confirmation before saving secrets, and dedicated profile retention/deletion. It must not reuse a hidden GET or checkout context or expose arbitrary selectors.
+- `app/.../WebViewKeys.kt` owns companion keyboard placement through a fixed focus script/message listener. The embedded Gecko surface needs equivalent focus/IME/companion behavior to be verified; a rendered surface alone does not prove parity.
+
+The concrete keyboard panel pad regression was fixed separately. These remaining web surfaces and networking limits are open review work, not evidence of completed migration.
