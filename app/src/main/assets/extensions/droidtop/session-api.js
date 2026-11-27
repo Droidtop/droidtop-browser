@@ -59,8 +59,11 @@ this.droidtopSessionCookies = class extends ExtensionAPI {
                 const pair = part.trim();
                 const eq = pair.indexOf("=");
                 if (eq <= 0) continue;
-                const result = Services.cookies.add("." + domain, "/", pair.slice(0, eq), pair.slice(eq + 1),
-                  true, false, true, Math.floor(Date.now() / 1000) + 86400, attrs,
+                // A legacy Cookie header has lost Domain/Path/HttpOnly attributes. Do not widen it to subdomains
+                // or make an authentication cookie readable to page script. Fresh site cookies keep their real
+                // attributes; imported unknown cookies conservatively use exact-host + HttpOnly + root path.
+                const result = Services.cookies.add(domain, "/", pair.slice(0, eq), pair.slice(eq + 1),
+                  true, true, true, Math.floor(Date.now() / 1000) + 86400, attrs,
                   Ci.nsICookie.SAMESITE_NONE, Ci.nsICookie.SCHEME_HTTPS);
                 if (result.result !== Ci.nsICookieValidation.eOK) throw new Error("cookie rejected");
               }

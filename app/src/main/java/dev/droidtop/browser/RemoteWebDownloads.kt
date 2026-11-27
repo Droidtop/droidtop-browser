@@ -22,7 +22,7 @@ internal interface WebDownloadSink {
 }
 
 /** One-use, bounded body handoffs. Bodies never become paths, JSON, or replayed GET requests. */
-internal class RemoteWebDownloads(private val host: IWebViewSurfaceHost) : WebDownloadSink {
+internal class RemoteWebDownloads(private val host: IWebViewSurfaceHost, private val idle: () -> Unit) : WebDownloadSink {
     private val main = Handler(Looper.getMainLooper())
     private val worker = ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(32))
     private val offers = ConcurrentHashMap<String, Offer>()
@@ -142,8 +142,11 @@ internal class RemoteWebDownloads(private val host: IWebViewSurfaceHost) : WebDo
                 if (offers.values.any { it.token == token }) null else cleanups.remove(token)
             }
             callbacks?.forEach { it() }
+            if (offers.isEmpty()) idle()
         }
     }
+
+    fun isEmpty(): Boolean = offers.isEmpty()
 
     @Synchronized
     fun close() {

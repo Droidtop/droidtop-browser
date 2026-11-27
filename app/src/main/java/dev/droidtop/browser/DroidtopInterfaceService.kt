@@ -16,6 +16,7 @@ import dev.droidtop.pluginhost.IPluginRuntime
 import dev.droidtop.pluginhost.IPluginRuntimeCallback
 import dev.droidtop.pluginhost.IWebViewSurfaceHost
 import org.json.JSONObject
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * droidtop Browser as one of droidtop's plugins: an `app_interface` plugin that provides `web.view` (droidtop
@@ -26,7 +27,7 @@ class DroidtopInterfaceService : Service() {
     override fun onBind(intent: Intent): IBinder? = if (intent.action == ACTION) Runtime(applicationContext) else null
 
     private class Runtime(private val context: Context) : IPluginRuntime.Stub() {
-        private var remote: RemoteWebView? = null
+        private val remotes = CopyOnWriteArrayList<RemoteWebView>()
         private fun caller(): Boolean = DroidtopLink.isDroidtop(context, Binder.getCallingUid()).also {
             if (!it) Log.w(TAG, "refused a call from uid ${Binder.getCallingUid()}: not droidtop")
         }
@@ -62,8 +63,8 @@ class DroidtopInterfaceService : Service() {
 
         override fun unloadPlugin(pluginId: String?) {
             if (caller() && pluginId != null) {
-                remote?.disconnect()
-                remote = null
+                remotes.toList().forEach { it.disconnect() }
+                remotes.clear()
                 DroidtopLink.disconnected(pluginId)
             }
         }
@@ -81,8 +82,11 @@ class DroidtopInterfaceService : Service() {
         override fun attachRelay(pluginId: String?, name: String?, relay: IBinder?) {
             if (!caller() || pluginId == null || !DroidtopLink.hasPlugin(pluginId) ||
                 name !in setOf("web.view.surface.v1", "web.view.surface.v2") || relay == null || Build.VERSION.SDK_INT < 30) return
-            remote?.disconnect()
-            remote = RemoteWebView(context, pluginId, IWebViewSurfaceHost.Stub.asInterface(relay), name == "web.view.surface.v2").also {
+            if (remotes.size >= 16) return
+            // Each host owns its own relay. Starting another page must not revoke a prior accepted body lease.
+            RemoteWebView(context, pluginId, IWebViewSurfaceHost.Stub.asInterface(relay), name == "web.view.surface.v2",
+                disposed = { remotes.remove(it) }).also {
+                remotes += it
                 runCatching { it.connect() }.onFailure { _ -> it.disconnect() }
             }
         }

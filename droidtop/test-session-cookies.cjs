@@ -21,6 +21,8 @@ const scope = {
     add(host, cookiePath, name, value, secure, httpOnly, session, expiry, attrs) {
       records.push({ host, path: cookiePath, name, value, isDomain: host.startsWith("."), originAttributes: attrs });
       assert.equal(secure, true);
+      assert.equal(httpOnly, true);
+      assert.equal(host.startsWith("."), false);
       assert.equal(session, true);
       return { result: 0 };
     },

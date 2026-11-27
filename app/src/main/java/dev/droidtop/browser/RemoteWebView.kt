@@ -27,11 +27,12 @@ internal class RemoteWebView(
     private val pluginId: String,
     private val host: IWebViewSurfaceHost,
     private val bodyEnabled: Boolean,
+    private val disposed: (RemoteWebView) -> Unit,
 ) : IWebViewSurfaceProvider.Stub() {
     private val main = Handler(Looper.getMainLooper())
     private val pages = mutableMapOf<String, Page>()
     private var disconnected = false
-    private val downloads = RemoteWebDownloads(host)
+    private val downloads = RemoteWebDownloads(host) { if (pages.isEmpty()) disconnect() }
     private val death = IBinder.DeathRecipient { main.post { disconnect() } }
 
     private class Page(val container: SurfaceControlViewHost, val root: FrameLayout, var densityDpi: Int) {
@@ -56,8 +57,7 @@ internal class RemoteWebView(
                 unavailable(token, "invalid_size")
                 return@post
             }
-            // The cookie store is shared by Gecko private tabs. Do not allow a second remote session to overwrite
-            // an active remote session's cookies; the host can retry or use its fallback before taking this token.
+            // Each relay owns one page. Cookie isolation comes from the page's unique Gecko context, not this cap.
             if (pages.isNotEmpty()) {
                 unavailable(token, "session_busy")
                 return@post
@@ -159,10 +159,12 @@ internal class RemoteWebView(
             main.post { disconnect() }
             return
         }
+        if (disconnected) return
         disconnected = true
         downloads.close()
         pages.keys.toList().forEach(::release)
         runCatching { host.asBinder().unlinkToDeath(death, 0) }
+        disposed(this)
     }
 
     private fun release(token: String) {
@@ -171,6 +173,7 @@ internal class RemoteWebView(
         page.controller?.destroy()
         page.controller = null
         page.container.release()
+        if (pages.isEmpty() && downloads.isEmpty()) disconnect()
     }
 
     private fun unavailable(token: String, reason: String) {
