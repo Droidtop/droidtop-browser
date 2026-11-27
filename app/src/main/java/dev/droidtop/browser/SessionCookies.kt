@@ -44,6 +44,7 @@ object SessionCookies {
         waiting += ready
         main.postDelayed({
             if (waiting.remove(ready)) {
+                if (waiting.isEmpty()) installing = false
                 Log.w(DroidtopInterfaceService.TAG, "the session extension did not connect in ${READY_MS / 1000} s")
                 failed()
             }
@@ -69,10 +70,17 @@ object SessionCookies {
                                 }
 
                                 override fun onPortDisconnected(port: Port) {
-                                    main.post { if (this@SessionCookies.port === port) this@SessionCookies.port = null }
+                                    main.post {
+                                        if (this@SessionCookies.port === port) {
+                                            this@SessionCookies.port = null
+                                            installing = false
+                                            answers.keys.toList().forEach { id -> answers.remove(id)?.invoke(null) }
+                                        }
+                                    }
                                 }
 
                                 override fun onPortMessage(message: Any, port: Port) {
+                                    if (this@SessionCookies.port !== port) return
                                     val reply = message as? JSONObject ?: runCatching { JSONObject(message.toString()) }.getOrNull() ?: return
                                     val answer = answers.remove(reply.optInt("id", -1)) ?: return
                                     main.post { answer(if (reply.optBoolean("ok")) reply.optJSONObject("result") ?: JSONObject() else null) }
@@ -117,9 +125,16 @@ object SessionCookies {
         val current = port ?: return answer(null)
         val id = ids.incrementAndGet()
         answers[id] = answer
+        // Installation can succeed and the port still stop answering. In particular, finishWith must not wait
+        // forever for its final cookie read before it can close the page and answer droidtop.
+        main.postDelayed({
+            answers.remove(id)?.let { pending ->
+                Log.w(DroidtopInterfaceService.TAG, "the session extension did not answer request $id")
+                pending(null)
+            }
+        }, READY_MS)
         runCatching { current.postMessage(message.put("id", id).put("storeId", PRIVATE_STORE)) }.onFailure {
-            answers.remove(id)
-            answer(null)
+            answers.remove(id)?.invoke(null)
         }
     }
 }

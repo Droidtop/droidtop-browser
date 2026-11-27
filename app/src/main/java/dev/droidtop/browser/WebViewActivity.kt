@@ -67,10 +67,15 @@ class WebViewActivity : Activity() {
             }
             runOnUiThread {
                 val data = reply?.takeIf { it.optBoolean("ok") }?.optJSONObject("data")
-                if (data == null || isFinishing) {
+                if (data == null) {
                     Log.w(DroidtopInterfaceService.TAG, "droidtop did not give the page: ${reply?.optJSONObject("error")?.optString("message")}")
                     answered = true
                     finish()
+                } else if (isFinishing || isDestroyed || answered) {
+                    // The one-use request may arrive after Back/Close destroyed this activity. Return ownership
+                    // immediately; setting answered without a finish would leave droidtop waiting for its timeout.
+                    answered = true
+                    Thread { DroidtopLink.call("web.view", "finish", JSONObject().put("token", given).put("completed", false)) }.start()
                 } else {
                     start(data)
                 }
@@ -83,9 +88,16 @@ class WebViewActivity : Activity() {
         SessionCookies.whenReady(
             engine,
             ready = {
-                SessionCookies.put(asked.optJSONObject("cookies") ?: JSONObject()) { put ->
-                    if (!put) Log.w(DroidtopInterfaceService.TAG, "droidtop's session could not be put into the page")
-                    if (!isFinishing) show(asked)
+                if (!answered && !isFinishing && !isDestroyed) SessionCookies.put(asked.optJSONObject("cookies") ?: JSONObject()) { put ->
+                    if (!put) {
+                        Log.w(DroidtopInterfaceService.TAG, "droidtop's session could not be put into the page")
+                        if (!answered && !isFinishing && !isDestroyed) finishWith(completed = false)
+                    } else if (!answered && !isFinishing && !isDestroyed) {
+                        show(asked)
+                    } else {
+                        // Cancellation can race an already-sent injection. Remove the sites it just installed.
+                        SessionCookies.clear(cookieDomains(asked))
+                    }
                 }
             },
             // Without the cookie bridge the session could neither go in nor come back: droidtop is answered "nothing
@@ -228,7 +240,7 @@ class WebViewActivity : Activity() {
             finish()
             return
         }
-        val domains = (asked.optJSONArray("domains").strings() + (asked.optJSONObject("cookies")?.keys()?.asSequence()?.toList() ?: emptyList())).distinct()
+        val domains = cookieDomains(asked)
         SessionCookies.read(domains) { cookies ->
             val args = JSONObject().put("token", token).put("completed", completed).put("cookies", cookies)
                 .put("downloads", JSONArray(captured))
@@ -261,7 +273,7 @@ class WebViewActivity : Activity() {
         if (!answered && isFinishing && request != null) {
             answered = true
             Thread { DroidtopLink.call("web.view", "finish", JSONObject().put("token", token).put("completed", false)) }.start()
-            SessionCookies.clear((request?.optJSONArray("domains").strings()))
+            request?.let { SessionCookies.clear(cookieDomains(it)) }
         }
         session?.close()
         view?.release()
@@ -274,6 +286,9 @@ class WebViewActivity : Activity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun cookieDomains(asked: JSONObject): List<String> =
+        (asked.optJSONArray("domains").strings() + (asked.optJSONObject("cookies")?.keys()?.asSequence()?.toList() ?: emptyList())).distinct()
 
     private fun JSONArray?.strings(): List<String> = this?.let { list -> (0 until list.length()).map { list.optString(it) }.filter { it.isNotBlank() } } ?: emptyList()
 
