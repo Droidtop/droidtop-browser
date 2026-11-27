@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Activity-based browser pages can transfer actual response bodies on Android 8 and later through an independently negotiated download API.
+
 - Android 11 and later can provide a Browser-owned web view inside Droidtop through a scoped surface API, including navigation status and the existing session/download result boundary.
 - Browse-only views use their own private Gecko context and exchange no saved cookies or downloads.
 

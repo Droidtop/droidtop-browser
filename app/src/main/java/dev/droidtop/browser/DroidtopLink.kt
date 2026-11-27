@@ -55,6 +55,7 @@ object DroidtopLink {
     }
 
     internal fun hasPlugin(id: String): Boolean = pluginId == id && broker != null
+    internal fun loadedPluginId(): String? = pluginId?.takeIf { broker != null }
 
     /**
      * A broker, knocking on droidtop's door when there is none yet (droidtop binds back and hands one over). Blocks: not

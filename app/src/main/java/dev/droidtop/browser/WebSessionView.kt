@@ -281,6 +281,11 @@ internal class WebSessionView(
         val sink = bodyDownloads
         val sourceUrl = currentUrl ?: request?.optString("url")
         val max = request?.optInt("maxDownloads", 1)?.coerceIn(1, 16) ?: 1
+        if (mode == "open" && !answered && alive() && (sink == null || !sink.available())) {
+            response.close()
+            downloadFailure("Update Droidtop to transfer this download from Browser", "download_capability_required")
+            return
+        }
         if (mode != "open" || answered || !acceptingDownloads || !alive() || given == null || sink == null ||
             sourceUrl == null || !sourceUrl.startsWith("https://") || sourceUrl.length > 4096 ||
             (size ?: -1) > RemoteWebDownloads.MAX_BYTES || captured.size + pendingDownloads >= max) {

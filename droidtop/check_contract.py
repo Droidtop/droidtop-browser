@@ -48,6 +48,22 @@ def main() -> int:
             if not re.search(rf"\b{method}\s*\(", aidl):
                 problems.append(f"missing embedded view {suffix}.{method}")
 
+    # Body transfer is independently usable below the embedded-view API floor. Building with a recent SDK alone
+    # cannot detect an accidental API30 class reference in this API26 path, so keep an explicit source boundary.
+    body_contract = json.loads((surface_path.parent / "web-download-v1.json").read_text(encoding="utf-8"))
+    for suffix, methods in (("Provider", body_contract["provider"]), ("Host", body_contract["host"])):
+        path = surface_path.parent / f"aidl/dev/droidtop/pluginhost/IWebDownload{suffix}.aidl"
+        aidl = path.read_text(encoding="utf-8")
+        if "SurfacePackage" in aidl or "IWebViewSurface" in aidl:
+            problems.append(f"body-only {suffix} depends on an API30 surface type")
+        for method in methods:
+            if not re.search(rf"\b{method}\s*\(", aidl):
+                problems.append(f"missing body-only {suffix}.{method}")
+    for name in ("WebDownloadEndpoint.kt", "RemoteWebDownloads.kt"):
+        body_source = (root / "app/src/main/java/dev/droidtop/browser" / name).read_text(encoding="utf-8")
+        if "android.view.Surface" in body_source or "IWebViewSurface" in body_source:
+            problems.append(f"{name} depends on an API30 surface type")
+
     action = contract["intent"]["action"]
     if f'android:name="{action}"' not in manifest:
         problems.append(f"the manifest does not answer {action}")
