@@ -25,11 +25,29 @@ import java.util.concurrent.CopyOnWriteArrayList
  * started by droidtop as [WebViewActivity], which talks back through that broker. Only droidtop is answered.
  */
 class DroidtopInterfaceService : Service() {
-    override fun onBind(intent: Intent): IBinder? = if (intent.action == ACTION) Runtime(applicationContext) else null
+    private val runtimes = CopyOnWriteArrayList<Runtime>()
+    override fun onBind(intent: Intent): IBinder? = if (intent.action == ACTION) Runtime(applicationContext).also {
+        runtimes += it
+    } else null
+
+    override fun onDestroy() {
+        // Unbinding a verified host does not necessarily call unloadPlugin, and the ordinary browser can keep
+        // this process alive. Remove static body endpoint references when this service's bindings are gone.
+        runtimes.toList().forEach { it.dispose() }
+        runtimes.clear()
+        DroidtopLink.loadedPluginId()?.let(DroidtopLink::disconnected)
+        super.onDestroy()
+    }
 
     private class Runtime(private val context: Context) : IPluginRuntime.Stub() {
         private val remotes = CopyOnWriteArrayList<RemoteWebView>()
         private val bodyEndpoints = CopyOnWriteArrayList<WebDownloadEndpoint>()
+        fun dispose() {
+            remotes.toList().forEach { it.disconnect() }
+            remotes.clear()
+            bodyEndpoints.toList().forEach { it.disconnect() }
+            bodyEndpoints.clear()
+        }
         private fun caller(): Boolean = DroidtopLink.isDroidtop(context, Binder.getCallingUid()).also {
             if (!it) Log.w(TAG, "refused a call from uid ${Binder.getCallingUid()}: not droidtop")
         }
@@ -65,10 +83,7 @@ class DroidtopInterfaceService : Service() {
 
         override fun unloadPlugin(pluginId: String?) {
             if (caller() && pluginId != null) {
-                remotes.toList().forEach { it.disconnect() }
-                remotes.clear()
-                bodyEndpoints.toList().forEach { it.disconnect() }
-                bodyEndpoints.clear()
+                dispose()
                 DroidtopLink.disconnected(pluginId)
             }
         }
