@@ -19,7 +19,7 @@ const scope = {
       return records.filter(c => c.originAttributes.geckoViewSessionContextId === attrs.geckoViewSessionContextId);
     },
     add(host, cookiePath, name, value, secure, httpOnly, session, expiry, attrs, sameSite) {
-      records.push({ host, path: cookiePath, name, value, isDomain: host.startsWith("."), originAttributes: attrs });
+      records.push({ host, path: cookiePath, name, value, isDomain: host.startsWith("."), isSession: session, expiry, originAttributes: attrs });
       assert.equal(secure, true);
       assert.equal(httpOnly, true);
       assert.equal(host.startsWith("."), false);
@@ -47,8 +47,13 @@ const call = (id, op, data) => api.call(id, op, JSON.stringify(data));
   assert.deepEqual(JSON.parse(await call(first, "get", { domains: ["example.com", "unrelated.example"] })),
     { "example.com": "session=first", "unrelated.example": "" });
   // Domain cookies apply to a child, host-only cookies do not leak to a sibling or parent.
-  records.push({ host: "login.example.com", path: "/", name: "hostOnly", value: "secret", isDomain: false,
+  records.push({ host: "login.example.com", path: "/", name: "hostOnly", value: "secret", isDomain: false, isSession: true,
     originAttributes: records[0].originAttributes });
+  for (const [name, changes] of [
+    ["expired", { isSession: false, expiry: 1 }],
+    ["partitioned", { originAttributes: { ...records[0].originAttributes, partitionKey: "(https,other.example)" } }],
+    ["firstPartyIsolated", { originAttributes: { ...records[0].originAttributes, firstPartyDomain: "other.example" } }],
+  ]) records.push({ ...records[0], name, value: "must-not-export", ...changes });
   const parent = JSON.parse(await call(first, "get", { domains: ["example.com"] }));
   assert.equal(parent["example.com"], "session=first");
   await call(first, "clear", { domains: ["example.com"] });

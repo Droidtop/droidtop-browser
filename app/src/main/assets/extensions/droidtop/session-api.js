@@ -28,7 +28,8 @@ function cookiesFor(attrs, domain) {
   // The exact context ID and private flag are required in EVERY query. getCookiesFromHost is base-domain-wide;
   // independently filter RFC host/domain scope before returning a header for this root URL.
   return Services.cookies.getCookiesWithOriginAttributes(JSON.stringify(attrs), domain, true)
-    .filter(c => matches(c, domain) && c.path === "/" && !c.originAttributes.partitionKey);
+    .filter(c => matches(c, domain) && c.path === "/" && !c.originAttributes.partitionKey &&
+      !c.originAttributes.firstPartyDomain && (c.isSession || c.expiry > Math.floor(Date.now() / 1000)));
 }
 
 function clear(attrs, domain) {
