@@ -64,7 +64,7 @@ this.droidtopSessionCookies = class extends ExtensionAPI {
                 // attributes; imported unknown cookies conservatively use exact-host + HttpOnly + root path.
                 const result = Services.cookies.add(domain, "/", pair.slice(0, eq), pair.slice(eq + 1),
                   true, true, true, Math.floor(Date.now() / 1000) + 86400, attrs,
-                  Ci.nsICookie.SAMESITE_NONE, Ci.nsICookie.SCHEME_HTTPS);
+                  Ci.nsICookie.SAMESITE_LAX, Ci.nsICookie.SCHEME_HTTPS);
                 if (result.result !== Ci.nsICookieValidation.eOK) throw new Error("cookie rejected");
               }
             }

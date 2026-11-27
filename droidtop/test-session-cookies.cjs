@@ -10,7 +10,7 @@ const second = "droidtop-22222222-2222-4222-8222-222222222222";
 const source = fs.readFileSync(path.join(__dirname, "../app/src/main/assets/extensions/droidtop/session-api.js"), "utf8");
 const scope = {
   ExtensionAPI: class {},
-  Ci: { nsICookie: { SAMESITE_NONE: 0, SCHEME_HTTPS: 2 }, nsICookieValidation: { eOK: 0 } },
+  Ci: { nsICookie: { SAMESITE_LAX: 1, SCHEME_HTTPS: 2 }, nsICookieValidation: { eOK: 0 } },
   Services: { cookies: {
     getCookiesWithOriginAttributes(pattern) {
       const attrs = JSON.parse(pattern);
@@ -18,11 +18,12 @@ const scope = {
       assert.match(attrs.geckoViewSessionContextId, /^gvctx[0-9a-f]+$/);
       return records.filter(c => c.originAttributes.geckoViewSessionContextId === attrs.geckoViewSessionContextId);
     },
-    add(host, cookiePath, name, value, secure, httpOnly, session, expiry, attrs) {
+    add(host, cookiePath, name, value, secure, httpOnly, session, expiry, attrs, sameSite) {
       records.push({ host, path: cookiePath, name, value, isDomain: host.startsWith("."), originAttributes: attrs });
       assert.equal(secure, true);
       assert.equal(httpOnly, true);
       assert.equal(host.startsWith("."), false);
+      assert.equal(sameSite, 1);
       assert.equal(session, true);
       return { result: 0 };
     },
