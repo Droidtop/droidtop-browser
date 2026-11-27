@@ -63,7 +63,7 @@ internal class RemoteWebView(
                 return@post
             }
             runCatching {
-                val display = context.getSystemService(DisplayManager::class.java).getDisplay(displayId)
+                val display = context.getSystemService(DisplayManager::class.java)?.getDisplay(displayId)
                     ?: error("no_display")
                 val config = configuration(width, height, densityDpi)
                 val windowContext = context.createDisplayContext(display)
