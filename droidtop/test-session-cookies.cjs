@@ -56,5 +56,11 @@ const call = (id, op, data) => api.call(id, op, JSON.stringify(data));
   await assert.rejects(call(first, "get", { domains: ["https://example.com"] }));
   await assert.rejects(call(first, "set", { cookies: { "example.com": "a=x\r\nInjected:y" } }));
   await assert.rejects(call(first, "arbitrary-script", { domains: [] }));
+  // Static lifecycle guards complement the executable cookie tests. They do not prove Android lifecycle behavior.
+  // A readback retry must retain the earned session; a consumed broker token has no same-token retry path.
+  const controller = fs.readFileSync(path.join(__dirname, "../app/src/main/java/dev/droidtop/browser/WebSessionView.kt"), "utf8");
+  assert.match(controller, /"session_read_failed",\s*preserveSession = true\)/);
+  assert.match(controller, /if \(!preserveSession\) releaseViewAndSession\(\)/);
+  assert.match(controller, /"result_refused",\s*retry = null\)/);
   console.log("Scoped cookie boundary: context isolation, cookie scope and rejected unsafe input pass");
 })().catch(error => { console.error(error); process.exitCode = 1; });

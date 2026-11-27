@@ -338,7 +338,7 @@ internal class WebSessionView(
         SessionCookies.read(sessionContext, domains) { cookies ->
             if (cookies == null) {
                 answered = false
-                showFailure("The session could not be read back", "session_read_failed") { finishWith(completed) }
+                showFailure("The session could not be read back", "session_read_failed", preserveSession = true) { finishWith(completed) }
                 return@read
             }
             val args = JSONObject().put("token", token).put("completed", completed).put("cookies", cookies)
@@ -352,7 +352,9 @@ internal class WebSessionView(
                         close()
                     } else if (alive()) {
                         answered = false
-                        showFailure("Droidtop could not accept this session or download", "result_refused") { finishWith(completed) }
+                        // finish consumes the one-use token even when validation fails. Repeating it cannot
+                        // recover the request; make the terminal outcome explicit rather than offering a false retry.
+                        showFailure("Droidtop could not accept this session or download. Close this page and start again.", "result_refused", retry = null)
                     }
                 }
             }.start()
@@ -384,16 +386,16 @@ internal class WebSessionView(
         close()
     }
 
-    private fun showFailure(message: String, code: String, retry: () -> Unit) {
+    private fun showFailure(message: String, code: String, preserveSession: Boolean = false, retry: (() -> Unit)?) {
         if (!alive()) return
         event(JSONObject().put("type", "error").put("code", code).put("message", message.take(512)))
-        releaseViewAndSession()
+        if (!preserveSession) releaseViewAndSession()
         display(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
             setBackgroundColor(Color.rgb(0x12, 0x12, 0x14))
             addView(TextView(context).apply { text = message; setTextColor(Color.WHITE) })
-            addView(button("Retry") { retry() })
+            if (retry != null) addView(button("Retry") { retry() })
             addView(button("Close") { abort() })
         })
     }
