@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "droidtop session",
-  "version": "1.0",
+  "version": "2.0",
   "description": "Puts droidtop's web session into a private tab and reads it back: the browser's side of droidtop's web.view.",
   "browser_specific_settings": {
     "gecko": {
@@ -12,8 +12,17 @@
   "background": {
     "scripts": ["background.js"]
   },
+  "experiment_apis": {
+    "droidtopSessionCookies": {
+      "schema": "session-schema.json",
+      "parent": {
+        "scopes": ["addon_parent"],
+        "script": "session-api.js",
+        "paths": [["droidtopSessionCookies"]]
+      }
+    }
+  },
   "permissions": [
-    "cookies",
     "nativeMessaging",
     "geckoViewAddons",
     "<all_urls>"

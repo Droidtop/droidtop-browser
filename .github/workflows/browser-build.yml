@@ -27,6 +27,13 @@ jobs:
         with:
           path: recipe
 
+      - name: Pinned plugin interface and surface contract
+        uses: actions/checkout@v5
+        with:
+          repository: mytop-project/mytop-plugins
+          ref: c64600aa06701e3ef6fe52a42ebde26c7068d0dc
+          path: shared-plugins
+
       # The adapter against droidtop's web.view contract (docs/contracts/web-view.json at the droidtop commit in
       # mytop-project/droidtop.pin), before the long build: droidtop checks its own side against the same file.
       - name: web.view contract
@@ -34,7 +41,10 @@ jobs:
           set -eu
           pin=$(tr -d ' \n\r' < recipe/droidtop/droidtop.pin)
           curl -fsSL "https://raw.githubusercontent.com/mytop-project/droidtop/$pin/docs/contracts/web-view.json" -o "$RUNNER_TEMP/web-view.json"
-          python3 -I recipe/droidtop/check_contract.py "$RUNNER_TEMP/web-view.json" recipe
+          python3 -I recipe/droidtop/check_contract.py "$RUNNER_TEMP/web-view.json" recipe shared-plugins/android/web-surface-v1.json
+
+      - name: Scoped cookie boundary unit tests
+        run: node recipe/droidtop/test-session-cookies.cjs
 
       - name: Pinned upstream commit
         id: pin
@@ -49,17 +59,11 @@ jobs:
           path: src
           submodules: true
 
-      # droidtop's plugin AIDL, at the commit droidtop itself pins (droidtop's vendor/mytop-plugins).
-      - name: droidtop's plugin interface
-        uses: actions/checkout@v5
-        with:
-          repository: mytop-project/mytop-plugins
-          ref: a95fc7b4cf6196eaec9dc29b4b16db6154d5a6af
-          path: src/droidtop/vendor/mytop-plugins
-
       - name: Compose
         run: |
           rsync -a --exclude .git recipe/ src/
+          mkdir -p src/droidtop/vendor/mytop-plugins
+          rsync -a --exclude .git shared-plugins/ src/droidtop/vendor/mytop-plugins/
           cd src && bash droidtop/apply.sh
 
       - name: Java
@@ -116,7 +120,8 @@ jobs:
           missing = [n.decode() for n in need if n not in dex]
           # Firefox's WebCompat extension, which the first releases shipped without (NS_ERROR_FILE_NOT_FOUND on load).
           names = set(z.namelist())
-          missing += [n for n in ("assets/extensions/webcompat/manifest.json", "assets/extensions/webcompat/run.js")
+          missing += [n for n in ("assets/extensions/webcompat/manifest.json", "assets/extensions/webcompat/run.js",
+                                 "assets/extensions/droidtop/session-api.js", "assets/extensions/droidtop/session-schema.json")
                       if n not in names]
           if not any(n.startswith("assets/extensions/webcompat/injections/generated/") for n in names):
               missing.append("assets/extensions/webcompat/injections/generated/")

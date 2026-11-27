@@ -1,0 +1,18 @@
+[
+  {
+    "namespace": "droidtopSessionCookies",
+    "description": "Built-in only: cookies scoped to a random Droidtop Gecko private session context.",
+    "functions": [
+      {
+        "name": "call",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {"name": "contextId", "type": "string"},
+          {"name": "op", "type": "string", "enum": ["set", "get", "clear"]},
+          {"name": "payload", "type": "string"}
+        ]
+      }
+    ]
+  }
+]

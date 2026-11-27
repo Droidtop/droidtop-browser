@@ -4,6 +4,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -13,6 +14,7 @@ import android.view.Surface
 import dev.droidtop.pluginhost.IPluginHostBroker
 import dev.droidtop.pluginhost.IPluginRuntime
 import dev.droidtop.pluginhost.IPluginRuntimeCallback
+import dev.droidtop.pluginhost.IWebViewSurfaceHost
 import org.json.JSONObject
 
 /**
@@ -24,6 +26,7 @@ class DroidtopInterfaceService : Service() {
     override fun onBind(intent: Intent): IBinder? = if (intent.action == ACTION) Runtime(applicationContext) else null
 
     private class Runtime(private val context: Context) : IPluginRuntime.Stub() {
+        private var remote: RemoteWebView? = null
         private fun caller(): Boolean = DroidtopLink.isDroidtop(context, Binder.getCallingUid()).also {
             if (!it) Log.w(TAG, "refused a call from uid ${Binder.getCallingUid()}: not droidtop")
         }
@@ -58,7 +61,11 @@ class DroidtopInterfaceService : Service() {
         override fun lastLoadError(pluginId: String?): String? = null
 
         override fun unloadPlugin(pluginId: String?) {
-            if (caller() && pluginId != null) DroidtopLink.disconnected(pluginId)
+            if (caller() && pluginId != null) {
+                remote?.disconnect()
+                remote = null
+                DroidtopLink.disconnected(pluginId)
+            }
         }
 
         override fun invoke(pluginId: String?, capability: String?, argsJson: String?): String =
@@ -71,7 +78,14 @@ class DroidtopInterfaceService : Service() {
 
         override fun startJob(pluginId: String?, capability: String?, argsJson: String?, jobId: String?) = false
         override fun cancelJob(pluginId: String?, jobId: String?) {}
-        override fun attachRelay(pluginId: String?, name: String?, relay: IBinder?) {}
+        override fun attachRelay(pluginId: String?, name: String?, relay: IBinder?) {
+            if (!caller() || pluginId == null || !DroidtopLink.hasPlugin(pluginId) ||
+                name !in setOf("web.view.surface.v1", "web.view.surface.v2") || relay == null || Build.VERSION.SDK_INT < 30) return
+            remote?.disconnect()
+            remote = RemoteWebView(context, pluginId, IWebViewSurfaceHost.Stub.asInterface(relay), name == "web.view.surface.v2").also {
+                runCatching { it.connect() }.onFailure { _ -> it.disconnect() }
+            }
+        }
     }
 
     companion object {

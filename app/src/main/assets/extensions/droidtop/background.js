@@ -32,54 +32,14 @@ function answer(id, ok, result, error) {
   if (port) port.postMessage({ id, ok, result: result || null, error: error || null });
 }
 
-/* The cookies the browser sends to https://<domain>/, as a Cookie header. */
-async function header(domain, storeId) {
-  const cookies = await browser.cookies.getAll({ url: `https://${domain}/`, storeId });
-  return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-}
-
-async function clear(domain, storeId) {
-  const cookies = await browser.cookies.getAll({ domain, storeId });
-  for (const c of cookies) {
-    const host = c.domain.replace(/^\./, "");
-    await browser.cookies.remove({ url: `https://${host}${c.path}`, name: c.name, storeId });
-  }
-}
-
-async function set(domain, text, storeId) {
-  await clear(domain, storeId);
-  for (const part of text.split(";")) {
-    const pair = part.trim();
-    const eq = pair.indexOf("=");
-    if (eq <= 0) continue;
-    await browser.cookies.set({
-      url: `https://${domain}/`,
-      name: pair.slice(0, eq),
-      value: pair.slice(eq + 1),
-      domain,
-      path: "/",
-      secure: true,
-      storeId,
-    });
-  }
-}
-
+/* Only the built-in privileged experiment can address Gecko's session-context origin attribute. No operation
+ * uses browser.cookies/firefox-private: that would address unrelated user private tabs. */
 async function onMessage(message) {
-  const { id, op, storeId } = message;
+  const { id, op, contextId } = message;
+  if (!Number.isInteger(id)) return;
   try {
-    if (op === "set") {
-      for (const [domain, text] of Object.entries(message.cookies || {})) await set(domain, text, storeId);
-      answer(id, true, {});
-    } else if (op === "get") {
-      const result = {};
-      for (const domain of message.domains || []) result[domain] = await header(domain, storeId);
-      answer(id, true, result);
-    } else if (op === "clear") {
-      for (const domain of message.domains || []) await clear(domain, storeId);
-      answer(id, true, {});
-    } else {
-      answer(id, false, null, `unknown op ${op}`);
-    }
+    const result = await browser.droidtopSessionCookies.call(contextId, op, JSON.stringify(message));
+    answer(id, true, JSON.parse(result));
   } catch (e) {
     answer(id, false, null, String(e));
   }

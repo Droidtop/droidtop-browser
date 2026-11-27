@@ -21,9 +21,6 @@ object SessionCookies {
     private const val URL = "resource://android/assets/extensions/droidtop/"
     private const val PORT = "droidtop"
 
-    /** Gecko's private-browsing cookie store, where droidtop's pages run. */
-    const val PRIVATE_STORE = "firefox-private"
-
     private var installing = false
     private var port: Port? = null
     private val waiting = mutableListOf<() -> Unit>()
@@ -110,16 +107,16 @@ object SessionCookies {
     }
 
     /** Puts [cookies] (`{domain: "a=1; b=2"}`) into the private store; [done] is told whether it worked. */
-    fun put(cookies: JSONObject, done: (Boolean) -> Unit) =
-        send(JSONObject().put("op", "set").put("cookies", cookies)) { done(it != null) }
+    fun put(contextId: String, cookies: JSONObject, done: (Boolean) -> Unit) =
+        send(JSONObject().put("op", "set").put("contextId", contextId).put("cookies", cookies)) { done(it != null) }
 
-    /** The private store's cookies for [domains], as `{domain: header}`; empty when they could not be read. */
-    fun read(domains: Collection<String>, done: (JSONObject) -> Unit) =
-        send(JSONObject().put("op", "get").put("domains", JSONArray(domains.toList()))) { done(it ?: JSONObject()) }
+    /** This session context's cookies for [domains], as `{domain: header}`; null on a failed read. */
+    fun read(contextId: String, domains: Collection<String>, done: (JSONObject?) -> Unit) =
+        send(JSONObject().put("op", "get").put("contextId", contextId).put("domains", JSONArray(domains.toList())), done)
 
     /** Takes [domains]' cookies out of the private store. */
-    fun clear(domains: Collection<String>, done: () -> Unit = {}) =
-        send(JSONObject().put("op", "clear").put("domains", JSONArray(domains.toList()))) { done() }
+    fun clear(contextId: String, domains: Collection<String>, done: () -> Unit = {}) =
+        send(JSONObject().put("op", "clear").put("contextId", contextId).put("domains", JSONArray(domains.toList()))) { done() }
 
     private fun send(message: JSONObject, answer: (JSONObject?) -> Unit) {
         val current = port ?: return answer(null)
@@ -133,7 +130,7 @@ object SessionCookies {
                 pending(null)
             }
         }, READY_MS)
-        runCatching { current.postMessage(message.put("id", id).put("storeId", PRIVATE_STORE)) }.onFailure {
+        runCatching { current.postMessage(message.put("id", id)) }.onFailure {
             answers.remove(id)?.invoke(null)
         }
     }
