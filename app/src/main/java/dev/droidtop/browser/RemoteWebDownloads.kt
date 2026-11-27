@@ -4,7 +4,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
-import dev.droidtop.pluginhost.IWebViewSurfaceHost
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ArrayBlockingQueue
@@ -15,6 +14,7 @@ import mozilla.components.concept.fetch.Response
 import org.json.JSONObject
 
 internal interface WebDownloadSink {
+    fun available(): Boolean = true
     fun offer(token: String, metadata: JSONObject, response: Response, result: (String, Boolean) -> Unit): Boolean
     fun discard(token: String, offerId: String)
     fun cancelOffers(token: String)
@@ -22,12 +22,14 @@ internal interface WebDownloadSink {
 }
 
 /** One-use, bounded body handoffs. Bodies never become paths, JSON, or replayed GET requests. */
-internal class RemoteWebDownloads(private val host: IWebViewSurfaceHost, private val idle: () -> Unit) : WebDownloadSink {
+internal class RemoteWebDownloads(private val emit: (String, String, String) -> Unit, private val idle: () -> Unit) : WebDownloadSink {
     private val main = Handler(Looper.getMainLooper())
     private val worker = ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(32))
     private val offers = ConcurrentHashMap<String, Offer>()
     private val closed = AtomicBoolean()
     private val cleanups = mutableMapOf<String, MutableList<() -> Unit>>()
+
+    override fun available(): Boolean = !closed.get()
 
     private class Offer(val token: String, val response: Response, val result: (String, Boolean) -> Unit) {
         val acknowledged = AtomicBoolean()
@@ -45,7 +47,7 @@ internal class RemoteWebDownloads(private val host: IWebViewSurfaceHost, private
         main.postDelayed({
             if (!offer.claimed.get() && offers[id] === offer) cancel(token, id, "Download offer expired")
         }, 60_000)
-        return runCatching { host.download(token, id, metadata.toString()); true }.getOrElse {
+        return runCatching { emit(token, id, metadata.toString()); true }.getOrElse {
             offers.remove(id, offer)
             response.close()
             false

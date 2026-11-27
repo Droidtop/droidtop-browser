@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: mytop-project/mytop-plugins
-          ref: c64600aa06701e3ef6fe52a42ebde26c7068d0dc
+          ref: e1c1ea8471766a0d4c19b231769bca5fbd578a62
           path: shared-plugins
 
       # The adapter against droidtop's web.view contract (docs/contracts/web-view.json at the droidtop commit in

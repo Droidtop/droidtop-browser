@@ -32,7 +32,10 @@ internal class RemoteWebView(
     private val main = Handler(Looper.getMainLooper())
     private val pages = mutableMapOf<String, Page>()
     private var disconnected = false
-    private val downloads = RemoteWebDownloads(host) { if (pages.isEmpty()) disconnect() }
+    private val downloads = RemoteWebDownloads(
+        emit = { token, id, metadata -> host.download(token, id, metadata) },
+        idle = { if (pages.isEmpty()) disconnect() },
+    )
     private val death = IBinder.DeathRecipient { main.post { disconnect() } }
 
     private class Page(val container: SurfaceControlViewHost, val root: FrameLayout, var densityDpi: Int) {

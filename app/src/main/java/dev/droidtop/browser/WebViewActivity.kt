@@ -14,7 +14,8 @@ class WebViewActivity : Activity() {
         super.onCreate(savedInstanceState)
         val token = intent.getStringExtra(EXTRA_TOKEN) ?: return finish()
         page = WebSessionView(this, components.core.engine, ::setContentView, ::finish,
-            alive = { !isFinishing && !isDestroyed }).also { it.open(token) }
+            alive = { !isFinishing && !isDestroyed },
+            bodyDownloads = WebDownloadEndpoint.activitySink()).also { it.open(token) }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
