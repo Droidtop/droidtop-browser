@@ -1,0 +1,17 @@
+{
+  "network.preconnect": false,
+  "network.early-hints.enabled": false,
+  "network.dns.disablePrefetch": true,
+  "network.dns.disablePrefetchFromHTTPS": true,
+  "network.prefetch-next": false,
+  "network.http.speculative-parallel-limit": 0,
+  "network.process.enabled": false,
+  "layers.gpu-process.enabled": false,
+  "media.rdd-process.enabled": false,
+  "media.utility-process.enabled": false,
+  "media.peerconnection.enabled": false,
+  "media.eme.enabled": false,
+  "media.gmp.decoder.enabled": false,
+  "media.gmp.encoder.enabled": false,
+  "dom.serviceWorkers.enabled": false
+}

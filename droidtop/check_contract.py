@@ -30,7 +30,12 @@ def main() -> int:
     if not sources:
         print("no adapter sources under app/src/main/java/dev/droidtop/browser")
         return 1
-    kotlin = "\n".join(p.read_text(encoding="utf-8") for p in sources)
+    # Restricted-runtime bootstrap attestation is an app-internal protocol, not a web.view broker payload.
+    internal_names = {"HiddenRuntimeBootstrap.kt"}
+    for p in sources:
+        if p.name in internal_names and "DroidtopLink.call" in p.read_text(encoding="utf-8"):
+            raise ValueError("internal bootstrap must not call the web.view broker")
+    kotlin = "\n".join(p.read_text(encoding="utf-8") for p in sources if p.name not in internal_names)
     manifest = (root / "droidtop/AndroidManifest.part.xml").read_text(encoding="utf-8")
     problems = []
     # The named embedded-view relay is separate from the broker's JSON API. Its bounded events are the only

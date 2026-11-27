@@ -1,0 +1,7 @@
+[
+  {"namespace": "droidtopHiddenBootstrap", "functions": [
+    {"name": "attest", "type": "function", "async": true, "parameters": [
+      {"name": "profile", "type": "string"}, {"name": "expected", "type": "string"}
+    ]}
+  ]}
+]

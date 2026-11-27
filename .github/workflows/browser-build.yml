@@ -46,6 +46,9 @@ jobs:
       - name: Scoped cookie boundary unit tests
         run: node recipe/droidtop/test-session-cookies.cjs
 
+      - name: Restricted runtime bootstrap source tests
+        run: node recipe/droidtop/test-hidden-bootstrap.cjs
+
       - name: Pinned upstream commit
         id: pin
         run: |

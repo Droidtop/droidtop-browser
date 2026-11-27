@@ -1,0 +1,14 @@
+{
+  "manifest_version": 2,
+  "name": "Droidtop restricted web runtime",
+  "version": "1.0",
+  "browser_specific_settings": {"gecko": {"id": "droidtop-hidden@droidtop.dev"}},
+  "background": {"scripts": ["background.js"]},
+  "experiment_apis": {
+    "droidtopHiddenBootstrap": {
+      "schema": "bootstrap-schema.json",
+      "parent": {"scopes": ["addon_parent"], "script": "bootstrap-api.js", "paths": [["droidtopHiddenBootstrap"]]}
+    }
+  },
+  "permissions": ["nativeMessaging", "geckoViewAddons"]
+}

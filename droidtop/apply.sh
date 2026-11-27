@@ -36,6 +36,10 @@ sed -i '/<string name="trackers_blocked_panel_categorical_num_trackers_blocked">
 manifest=app/src/main/AndroidManifest.xml
 need '</application>' "$manifest"
 need '<application' "$manifest"
+need 'android:name=".FenixApplication"' "$manifest"
+# Fenix's ordinary components remain unchanged in its main process. The explicit secondary-process guard prevents
+# incidental access to them from creating a default GeckoRuntime before the restricted profile is configured.
+sed -i 's#android:name=".FenixApplication"#android:name="dev.droidtop.browser.DroidtopBrowserApplication"#' "$manifest"
 [ -d droidtop/vendor/mytop-plugins/android/aidl ] || { echo "apply.sh: droidtop/vendor/mytop-plugins is missing (browser-build.yml checks it out)" >&2; exit 1; }
 [ -f app/src/main/java/dev/droidtop/browser/WebViewActivity.kt ] || { echo "apply.sh: the adapter's sources are missing from app/src/main/java" >&2; exit 1; }
 # droidtop's AIDL where the build compiles AIDL by default (see build.part.gradle).
