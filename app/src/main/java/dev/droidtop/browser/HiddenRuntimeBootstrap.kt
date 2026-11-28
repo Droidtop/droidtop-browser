@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.UUID
 import org.json.JSONObject
 import org.mozilla.gecko.process.GeckoProcessManager
 import org.mozilla.geckoview.GeckoRuntime
@@ -57,8 +58,10 @@ internal object HiddenRuntimeBootstrap {
     private fun prepare(context: Context): Plan {
         val root = File(context.noBackupFilesDir, "droidtop-web-runtime").canonicalFile
         check(root.mkdirs() || root.isDirectory)
-        val profile = File(root, "profile").canonicalFile
-        check(profile.parentFile == root && (profile.mkdirs() || profile.isDirectory))
+        // Never load prefs.js from an earlier process: user prefs could override startup defaults
+        // before native attestation. This profile belongs to this runtime only, not Browser users.
+        val profile = File(root, "profile-${UUID.randomUUID()}").canonicalFile
+        check(profile.parentFile == root && profile.mkdir())
         val prefs = context.assets.open("extensions/droidtop-hidden/required-prefs.json").bufferedReader().use { JSONObject(it.readText()) }
         prefs.keys().asSequence().forEach { key ->
             val value = prefs.get(key)
