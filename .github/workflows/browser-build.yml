@@ -58,6 +58,7 @@ jobs:
           node recipe/droidtop/test-hidden-bootstrap.cjs
           node recipe/droidtop/test-hidden-channel-guard.cjs
           node recipe/droidtop/test-hidden-extractor.cjs
+          node recipe/droidtop/test-hidden-background.cjs
 
       - name: Pinned upstream commit
         id: pin

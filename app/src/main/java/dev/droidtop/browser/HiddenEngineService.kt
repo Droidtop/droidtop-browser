@@ -16,20 +16,27 @@ class HiddenEngineService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private val leases = mutableMapOf<IBinder, Lease>()
     private lateinit var engine: HiddenDocumentEngine
-    private class Lease(val owner: HiddenDocumentEngine.Owner, val death: IBinder.DeathRecipient, val reply: Messenger)
+    private class Lease(val owner: HiddenDocumentEngine.Owner, val death: IBinder.DeathRecipient, val reply: Messenger, val control: IBinder)
     private val messenger = Messenger(object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(message: Message) {
             if (message.sendingUid != Process.myUid() || !HiddenProcess.owns(this@HiddenEngineService)) return
+            val control = message.data.getBinder("control") ?: return
+            if (message.what == HiddenEngineConnection.DETACH) {
+                val one = message.data.getBinder("lease")
+                if (one != null) { if (leases[one]?.control == control) release(one) }
+                else leases.filterValues { it.control == control }.keys.toList().forEach(::release)
+                return
+            }
             val lease = message.data.getBinder("lease") ?: return
-            if (message.what == HiddenEngineConnection.DETACH) { release(lease); return }
-            if (message.what != HiddenEngineConnection.ATTACH || leases.containsKey(lease) || leases.size >= 16) return
+            if (message.what != HiddenEngineConnection.ATTACH || leases.containsKey(lease)) return
+            if (leases.size >= 16) { replyClosed(message.replyTo, lease); return }
             val pluginId = message.data.getString("pluginId")?.takeIf { it.isNotBlank() && it.length <= 256 } ?: return
             val host = message.data.getBinder("host") ?: return
             val reply = message.replyTo ?: return
             val owner = engine.owner(pluginId, IWebHiddenHost.Stub.asInterface(host), closed = { release(lease) })
             val death = IBinder.DeathRecipient { main.post { release(lease) } }
             runCatching { lease.linkToDeath(death, 0) }.onFailure { owner.close(); return }
-            leases[lease] = Lease(owner, death, reply)
+            leases[lease] = Lease(owner, death, reply, control)
             owner.connect()
         }
     })
@@ -37,7 +44,9 @@ class HiddenEngineService : Service() {
     override fun onCreate() {
         super.onCreate()
         check(HiddenProcess.owns(this))
-        engine = HiddenDocumentEngine(this)
+        engine = HiddenDocumentEngine(this, retire = {
+            if (HiddenProcess.owns(this)) Process.killProcess(Process.myPid())
+        })
     }
 
     override fun onBind(intent: Intent): IBinder = messenger.binder
@@ -46,7 +55,11 @@ class HiddenEngineService : Service() {
         val entry = leases.remove(lease) ?: return
         runCatching { lease.unlinkToDeath(entry.death, 0) }
         entry.owner.close()
-        runCatching { entry.reply.send(Message.obtain(null, HiddenEngineConnection.CLOSED).apply { data = Bundle().apply { putBinder("lease", lease) } }) }
+        replyClosed(entry.reply, lease)
+    }
+
+    private fun replyClosed(reply: Messenger?, lease: IBinder) {
+        runCatching { reply?.send(Message.obtain(null, HiddenEngineConnection.CLOSED).apply { data = Bundle().apply { putBinder("lease", lease) } }) }
     }
 
     override fun onDestroy() {

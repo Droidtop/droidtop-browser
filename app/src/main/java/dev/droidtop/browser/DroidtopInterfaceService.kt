@@ -43,13 +43,17 @@ class DroidtopInterfaceService : Service() {
         private val remotes = CopyOnWriteArrayList<RemoteWebView>()
         private val bodyEndpoints = CopyOnWriteArrayList<WebDownloadEndpoint>()
         private val hiddenEndpoints = CopyOnWriteArrayList<HiddenEngineConnection>()
+        private var hiddenReady = false
         fun dispose() {
+            val hidden = synchronized(hiddenEndpoints) {
+                hiddenReady = false
+                hiddenEndpoints.toList().also { hiddenEndpoints.clear() }
+            }
+            hidden.forEach { it.close() }
             remotes.toList().forEach { it.disconnect() }
             remotes.clear()
             bodyEndpoints.toList().forEach { it.disconnect() }
             bodyEndpoints.clear()
-            hiddenEndpoints.toList().forEach { it.close() }
-            hiddenEndpoints.clear()
         }
         private fun caller(): Boolean = DroidtopLink.isDroidtop(context, Binder.getCallingUid()).also {
             if (!it) Log.w(TAG, "refused a call from uid ${Binder.getCallingUid()}: not droidtop")
@@ -69,6 +73,7 @@ class DroidtopInterfaceService : Service() {
             files?.forEach { runCatching { it.close() } }
             if (!caller() || pluginId == null || broker == null) return false
             DroidtopLink.connected(pluginId, broker)
+            synchronized(hiddenEndpoints) { hiddenReady = true }
             return true
         }
 
@@ -105,11 +110,15 @@ class DroidtopInterfaceService : Service() {
             if (!caller() || pluginId == null || !DroidtopLink.hasPlugin(pluginId) || relay == null) return
             if (name == HiddenEngineConnection.RELAY) {
                 // Joint source/CI review must explicitly enable the new networking capability.
-                if (!HIDDEN_DOCUMENT_ENABLED || Build.VERSION.SDK_INT < 30 || hiddenEndpoints.size >= 16) return
-                HiddenEngineConnection(context, pluginId, relay, disposed = { hiddenEndpoints.remove(it) }).also {
-                    hiddenEndpoints += it
-                    it.connect()
+                if (!HIDDEN_DOCUMENT_ENABLED || Build.VERSION.SDK_INT < 30) return
+                val endpoint = synchronized(hiddenEndpoints) {
+                    if (!hiddenReady || !DroidtopLink.hasPlugin(pluginId)) return@synchronized null
+                    hiddenEndpoints.firstOrNull { it.pluginId == pluginId } ?: run {
+                        if (hiddenEndpoints.size >= 16) return@run null
+                        HiddenEngineConnection(context, pluginId, disposed = { hiddenEndpoints.remove(it) }).also { hiddenEndpoints += it }
+                    }
                 }
+                endpoint?.attach(relay)
                 return
             }
             if (name == WebDownloadEndpoint.RELAY) {

@@ -29,7 +29,7 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 
 /** One isolated runtime, four immutable operations, fixed extraction only. No visible-session reuse. */
-internal class HiddenDocumentEngine(private val context: Context) {
+internal class HiddenDocumentEngine(private val context: Context, private val retire: () -> Unit) {
     private val main = Handler(Looper.getMainLooper())
     private val workers = ThreadPoolExecutor(4, 4, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(32))
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -44,22 +44,24 @@ internal class HiddenDocumentEngine(private val context: Context) {
         private val tokens = ConcurrentHashMap<String, Job>()
         private val active = AtomicBoolean(true)
         private var connected = false
+        private var started = false
         private val death = IBinder.DeathRecipient { close() }
         private fun caller() = active.get() && DroidtopLink.isDroidtop(context, Binder.getCallingUid())
 
         fun connect() {
             runCatching { host.asBinder().linkToDeath(death, 0) }.onFailure { close(); return }
+            main.postDelayed({ if (!started) close() }, 30_000)
             HiddenRuntimeBootstrap.start(context) { result ->
                 if (!active.get() || closed) return@start
                 val initialized = result.getOrNull()
-                if (initialized == null) { close(); return@start }
+                if (initialized == null) { this@HiddenDocumentEngine.close(retireProcess = true); return@start }
                 if (port == null) {
                     ready = initialized
                     port = HiddenPort(initialized, authorize = { id, url, kind ->
                         val job = jobs[id]
                         job != null && !job.cancelled.get() && job.accepted && safeUrl(url) != null &&
                             runCatching { job.owner.host.authorize(job.token, url, kind) }.getOrDefault(false)
-                    }, closed = { this@HiddenDocumentEngine.close() })
+                    }, closed = { this@HiddenDocumentEngine.close(retireProcess = true) })
                 }
                 connected = true
                 runCatching { host.connected(this, arrayOf("web.document.get.v1", "web.runtime.isolated.v1")) }.onFailure { close() }
@@ -69,8 +71,9 @@ internal class HiddenDocumentEngine(private val context: Context) {
         override fun start(token: String?) {
             if (!caller() || token.isNullOrBlank() || token.length > 256) return
             main.post {
-                if (!active.get() || closed || !connected || tokens.containsKey(token)) return@post
-                if (jobs.size >= 4) { runCatching { host.unavailable(token, "Restricted renderer is busy") }; return@post }
+                if (!active.get() || closed || !connected || started) return@post
+                if (jobs.size >= 4) { runCatching { host.unavailable(token, "Restricted renderer is busy") }; close(); return@post }
+                started = true
                 val job = Job(this, token)
                 tokens[token] = job
                 jobs[job.contextId] = job
@@ -133,7 +136,10 @@ internal class HiddenDocumentEngine(private val context: Context) {
             }
         }
 
-        fun forget(job: Job) { tokens.remove(job.token, job) }
+        fun forget(job: Job) {
+            tokens.remove(job.token, job)
+            if (started && tokens.isEmpty()) close()
+        }
     }
 
     internal class Job(val owner: Owner, val token: String) {
@@ -330,6 +336,7 @@ internal class HiddenDocumentEngine(private val context: Context) {
         cleanupPage(job)
         runCatching { job.writer?.closeWithError("Restricted document closed") }
         job.bytes = null
+        job.cookie = ""
         jobProxy.remove(job.contextId)
         jobs.remove(job.contextId, job)
         job.owner.forget(job)
@@ -340,7 +347,7 @@ internal class HiddenDocumentEngine(private val context: Context) {
         catch (busy: java.util.concurrent.RejectedExecutionException) { main.post { fail(job, "failed", "Restricted renderer is busy") } }
     }
 
-    fun close() {
+    fun close(retireProcess: Boolean = false) {
         if (closed) return
         closed = true
         owners.toList().forEach { it.close() }
@@ -348,6 +355,7 @@ internal class HiddenDocumentEngine(private val context: Context) {
         workers.shutdownNow()
         port?.close()
         port = null
+        if (retireProcess) retire()
     }
 
     companion object {

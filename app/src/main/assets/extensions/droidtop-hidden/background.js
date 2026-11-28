@@ -1,5 +1,11 @@
 "use strict";
 let port;
+const contexts = new Set();
+let pollingTimer;
+function updatePolling() {
+  if (contexts.size && !pollingTimer) pollingTimer = setInterval(pollAuthorization, 25);
+  else if (!contexts.size && pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
+}
 function connect() {
   if (port) return;
   try {
@@ -7,6 +13,7 @@ function connect() {
     port = opened;
     opened.onDisconnect.addListener(() => {
       if (port === opened) port = null;
+      contexts.clear(); updatePolling();
       browser.droidtopHiddenBootstrap.abortAll().catch(() => {});
     });
     opened.onMessage.addListener(async message => {
@@ -21,8 +28,15 @@ function connect() {
           return;
         }
         let result;
-        if (message.op === "register") result = { registered: await browser.droidtopHiddenBootstrap.register(message.contextId, message.timeoutMs, JSON.stringify(message.proxy)) };
-        else if (message.op === "unregister") { await browser.droidtopHiddenBootstrap.unregister(message.contextId); result = {}; }
+        if (message.op === "register") {
+          const registered = await browser.droidtopHiddenBootstrap.register(message.contextId, message.timeoutMs, JSON.stringify(message.proxy));
+          if (registered) { contexts.add(message.contextId); updatePolling(); }
+          result = { registered };
+        }
+        else if (message.op === "unregister") {
+          await browser.droidtopHiddenBootstrap.unregister(message.contextId);
+          contexts.delete(message.contextId); updatePolling(); result = {};
+        }
         else if (message.op === "cookies") result = JSON.parse(await browser.droidtopHiddenBootstrap.cookies(message.contextId, message.cookieOp, message.host, message.header || ""));
         else if (message.op === "snapshot") {
           const info = JSON.parse(await browser.droidtopHiddenBootstrap.info(message.contextId));
@@ -46,7 +60,7 @@ function connect() {
 }
 setInterval(connect, 250);
 let polling = false;
-setInterval(async () => {
+async function pollAuthorization() {
   if (!port || polling) return;
   polling = true;
   try {
@@ -54,5 +68,5 @@ setInterval(async () => {
     for (const request of requests) port?.postMessage({ op: "authorize", ...request });
   } catch (error) { /* The channel guard's own deadline cancels anything not answered. */ }
   finally { polling = false; }
-}, 25);
+}
 connect();
