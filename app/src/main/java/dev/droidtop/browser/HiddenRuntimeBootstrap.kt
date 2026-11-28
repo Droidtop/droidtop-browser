@@ -137,7 +137,7 @@ internal object HiddenRuntimeBootstrap {
                                 if (finished) return
                                 val reply = message as? JSONObject ?: return
                                 val actual = reply.optJSONObject("prefs")
-                                val matched = reply.optBoolean("ok") && reply.optInt("engineMajor") == 160 && reply.optString("profile") == plan.profile.canonicalPath &&
+                                val matched = reply.optBoolean("ok") && reply.optInt("engineMajor") == 160 && reply.optString("profile") == plan.profile.absolutePath &&
                                     actual != null && plan.prefs.keys().asSequence().all { actual.opt(it) == plan.prefs.get(it) } &&
                                     GeckoProcessManager.getInstance().isIsolatedProcessEnabled
                                 if (!matched) { fail(IllegalStateException("Restricted runtime attestation failed")); return }
@@ -154,7 +154,7 @@ internal object HiddenRuntimeBootstrap {
                                 } else fail(error)
                             }
                         })
-                        port.postMessage(JSONObject(mapOf("op" to "attest", "profile" to plan.profile.canonicalPath, "prefs" to plan.prefs)))
+                        port.postMessage(JSONObject(mapOf("op" to "attest", "profile" to plan.profile.absolutePath, "prefs" to plan.prefs)))
                     }
                 }, "droidtop-hidden")
                 }, { error -> fail(error ?: IllegalStateException("Restricted private extension setup failed")) })
