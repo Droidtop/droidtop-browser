@@ -59,7 +59,7 @@ internal class HiddenDocumentEngine(private val context: Context, private val re
                     ready = initialized
                     port = HiddenPort(initialized, authorize = { id, url, kind ->
                         val job = jobs[id]
-                        job != null && !job.cancelled.get() && job.accepted && safeUrl(url) != null &&
+                        job != null && !job.cancelled.get() && !job.ended && job.accepted && safeUrl(url) != null &&
                             runCatching { job.owner.host.authorize(job.token, url, kind) }.getOrDefault(false)
                     }, closed = { this@HiddenDocumentEngine.close(retireProcess = true) })
                 }
@@ -150,7 +150,7 @@ internal class HiddenDocumentEngine(private val context: Context, private val re
         @Volatile var accepted = false
         @Volatile var bytes: ByteArray? = null
         @Volatile var writer: ParcelFileDescriptor? = null
-        var ended = false
+        @Volatile var ended = false
         var finishing = false
         var stopped = false
         var url = ""
@@ -211,13 +211,14 @@ internal class HiddenDocumentEngine(private val context: Context, private val re
             session.progressDelegate = object : GeckoSession.ProgressDelegate {
                 override fun onPageStart(session: GeckoSession, url: String) { job.stopped = false }
                 override fun onPageStop(session: GeckoSession, success: Boolean) {
+                    if (job.ended || job.cancelled.get()) return
                     job.stopped = success
                     if (!success) fail(job, "failed", "Restricted document could not load")
                 }
             }
             session.contentDelegate = object : GeckoSession.ContentDelegate {
-                override fun onCrash(session: GeckoSession) { fail(job, "failed", "Restricted renderer stopped") }
-                override fun onKill(session: GeckoSession) { fail(job, "failed", "Restricted renderer stopped") }
+                override fun onCrash(session: GeckoSession) { if (!job.ended && !job.cancelled.get()) fail(job, "failed", "Restricted renderer stopped") }
+                override fun onKill(session: GeckoSession) { if (!job.ended && !job.cancelled.get()) fail(job, "failed", "Restricted renderer stopped") }
             }
             session.open(checkNotNull(ready).runtime)
             val images = ImageReader.newInstance(1024, 768, PixelFormat.RGBA_8888, 2)
@@ -226,7 +227,7 @@ internal class HiddenDocumentEngine(private val context: Context, private val re
             val display = session.acquireDisplay()
             job.display = display
             display.surfaceChanged(GeckoDisplay.SurfaceInfo.Builder(images.surface).size(1024, 768)
-                .newSurfaceProvider { fail(job, "failed", "Restricted render target was lost") }.build())
+                .newSurfaceProvider { if (!job.ended && !job.cancelled.get()) fail(job, "failed", "Restricted render target was lost") }.build())
             session.setActive(true)
             session.setFocused(false)
             session.loadUri(job.url)
@@ -237,6 +238,7 @@ internal class HiddenDocumentEngine(private val context: Context, private val re
     private fun navigation(job: Job, url: String, kind: String): GeckoResult<AllowOrDeny> {
         val answer = GeckoResult<AllowOrDeny>()
         val answered = AtomicBoolean(false)
+        if (job.ended || job.cancelled.get()) { answer.complete(AllowOrDeny.DENY); return answer }
         if (url == "about:blank") { answer.complete(AllowOrDeny.ALLOW); return answer }
         execute(job) {
             val allowed = !job.cancelled.get() && safeUrl(url) != null && runCatching { job.owner.host.authorize(job.token, url, kind) }.getOrDefault(false)
