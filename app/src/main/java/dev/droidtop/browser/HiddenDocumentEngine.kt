@@ -51,7 +51,8 @@ internal class HiddenDocumentEngine(private val context: Context) {
             runCatching { host.asBinder().linkToDeath(death, 0) }.onFailure { close(); return }
             HiddenRuntimeBootstrap.start(context) { result ->
                 if (!active.get() || closed) return@start
-                val initialized = result.getOrNull() ?: return@start
+                val initialized = result.getOrNull()
+                if (initialized == null) { close(); return@start }
                 if (port == null) {
                     ready = initialized
                     port = HiddenPort(initialized, authorize = { id, url, kind ->

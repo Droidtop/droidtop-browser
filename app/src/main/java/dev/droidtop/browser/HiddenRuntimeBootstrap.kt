@@ -28,6 +28,7 @@ internal object HiddenRuntimeBootstrap {
     private var cached: Ready? = null
     private var failure: Throwable? = null
     private var starting = false
+    private var launching: GeckoRuntime? = null
     private val waiting = mutableListOf<(Result<Ready>) -> Unit>()
 
     data class Ready(val runtime: GeckoRuntime, val extension: WebExtension, val profile: File, val port: WebExtension.Port)
@@ -50,18 +51,24 @@ internal object HiddenRuntimeBootstrap {
             waiting += done
             if (starting) return@post
             starting = true
+            // Include profile preparation/cleanup in the same cold-start bound as native startup.
+            main.postDelayed({ if (starting) complete(Result.failure(IllegalStateException("Restricted browser startup timed out"))) }, 15_000)
             files.execute {
                 runCatching { prepare(context) }.fold(
-                    onSuccess = { plan -> main.post { launch(context, plan, ::complete) } },
-                    onFailure = { error -> main.post { complete(Result.failure(error)) } },
+                    onSuccess = { plan -> main.post { if (starting) launch(context, plan, ::complete) } },
+                    onFailure = { error -> main.post { if (starting) complete(Result.failure(error)) } },
                 )
             }
         }
     }
 
     private fun complete(result: Result<Ready>) {
-        result.fold(onSuccess = { cached = it }, onFailure = { failure = it })
+        if (!starting) { result.getOrNull()?.let { runCatching { it.runtime.shutdown() } }; return }
         starting = false
+        result.fold(onSuccess = { cached = it }, onFailure = { failure = it })
+        val created = launching
+        launching = null
+        if (result.isFailure) runCatching { created?.shutdown() }
         val callbacks = waiting.toList()
         waiting.clear()
         callbacks.forEach { it(result) }
@@ -109,7 +116,6 @@ internal object HiddenRuntimeBootstrap {
             runCatching { runtime?.shutdown() }
             done(Result.failure(failure))
         }
-        main.postDelayed({ fail(IllegalStateException("Restricted browser startup timed out")) }, 15_000)
         runCatching {
             val settings = GeckoRuntimeSettings.Builder()
                 .arguments(arrayOf("-profile", plan.profile.absolutePath))
@@ -123,6 +129,7 @@ internal object HiddenRuntimeBootstrap {
             GeckoRuntime.create(context, DroidtopRestrictedSettings.apply(settings, required))
         }.fold(onFailure = ::fail, onSuccess = { created ->
             runtime = created
+            launching = created
             // The source-pinned adapter supplied restrictions before native startup. Independently verify
             // the resulting native profile/preferences through the installed privileged extension.
             created.webExtensionController.ensureBuiltIn(URL, ID).accept({ extension ->
