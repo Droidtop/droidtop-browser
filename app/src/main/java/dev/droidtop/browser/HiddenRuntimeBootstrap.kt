@@ -4,6 +4,12 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.FileVisitResult
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.concurrent.Executors
 import java.util.UUID
 import org.json.JSONObject
@@ -66,6 +72,22 @@ internal object HiddenRuntimeBootstrap {
     private fun prepare(context: Context): Plan {
         val root = File(context.noBackupFilesDir, "droidtop-web-runtime").canonicalFile
         check(root.mkdirs() || root.isDirectory)
+        // Only this process owns these generated profiles, and prepare runs before its sole runtime
+        // exists. Remove prior-process profiles without following symbolic links or touching Browser.
+        root.listFiles()?.filter { it.name.matches(Regex("profile-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) }?.forEach { old ->
+            check(old.canonicalFile.parentFile == root)
+            Files.walkFileTree(old.toPath(), object : SimpleFileVisitor<Path>() {
+                override fun visitFile(path: Path, attributes: BasicFileAttributes): FileVisitResult {
+                    Files.delete(path)
+                    return FileVisitResult.CONTINUE
+                }
+                override fun postVisitDirectory(path: Path, error: IOException?): FileVisitResult {
+                    if (error != null) throw error
+                    Files.delete(path)
+                    return FileVisitResult.CONTINUE
+                }
+            })
+        }
         // Never load prefs.js from an earlier process: user prefs could override startup defaults
         // before native attestation. This profile belongs to this runtime only, not Browser users.
         val profile = File(root, "profile-${UUID.randomUUID()}").canonicalFile
