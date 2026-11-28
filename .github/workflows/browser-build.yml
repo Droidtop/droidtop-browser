@@ -47,7 +47,10 @@ jobs:
         run: node recipe/droidtop/test-session-cookies.cjs
 
       - name: Restricted runtime bootstrap source tests
-        run: node recipe/droidtop/test-hidden-bootstrap.cjs
+        run: |
+          node recipe/droidtop/test-hidden-bootstrap.cjs
+          node recipe/droidtop/test-hidden-channel-guard.cjs
+          node recipe/droidtop/test-hidden-extractor.cjs
 
       - name: Pinned upstream commit
         id: pin

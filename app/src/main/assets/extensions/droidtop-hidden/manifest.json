@@ -10,5 +10,5 @@
       "parent": {"scopes": ["addon_parent"], "script": "bootstrap-api.js", "paths": [["droidtopHiddenBootstrap"]]}
     }
   },
-  "permissions": ["nativeMessaging", "geckoViewAddons"]
+  "permissions": ["nativeMessaging", "geckoViewAddons", "tabs", "<all_urls>"]
 }

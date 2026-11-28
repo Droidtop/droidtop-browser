@@ -5,15 +5,26 @@ const path = require("node:path");
 const base = path.join(__dirname, "../app/src/main/assets/extensions/droidtop-hidden");
 const required = JSON.parse(fs.readFileSync(path.join(base, "required-prefs.json"), "utf8"));
 const source = fs.readFileSync(path.join(base, "bootstrap-api.js"), "utf8");
+const guardSource = fs.readFileSync(path.join(base, "channel-guard.js"), "utf8");
 function instance(profile, actual, defaults = required, engineVersion = "160.0.1") {
   const locks = [];
-  const scope = { ExtensionAPI: class {}, Ci: { nsIFile: {} }, Services: {
+  const scope = { ExtensionAPI: class {}, Ci: { nsIFile: {} },
+    Cc: { "@mozilla.org/network/protocol-proxy-service;1": { getService() { return { newProxyInfo() { return {}; }, registerChannelFilter() {} }; } } },
+    ChromeUtils: { generateQI() { return function() { return this; }; }, importESModule() { return { setTimeout, clearTimeout }; } }, Services: {
+    scriptloader: { loadSubScript() { vm.runInContext(guardSource, scope); } },
+    obs: { addObserver() {} },
     dirsvc: { get() { return { path: profile, normalize() {} }; } },
     appinfo: { platformVersion: engineVersion },
     prefs: {
-      getDefaultBranch() { return { getPrefType(key) { return key in defaults ? 128 : 0; } }; },
+      getDefaultBranch() { return {
+        getPrefType(key) { return key in defaults ? 128 : 0; },
+        setBoolPref(key, value) { assert.equal(actual[key], value); },
+        setIntPref(key, value) { assert.equal(actual[key], value); },
+        setStringPref(key, value) { assert.equal(actual[key], value); },
+      }; },
       getBoolPref(key) { assert.equal(typeof actual[key], "boolean"); return actual[key]; },
       getIntPref(key) { assert.equal(typeof actual[key], "number"); return actual[key]; },
+      getStringPref(key) { assert.equal(typeof actual[key], "string"); return actual[key]; },
       lockPref(key) { locks.push(key); },
     },
   } };

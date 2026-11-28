@@ -13,5 +13,17 @@
   "media.eme.enabled": false,
   "media.gmp.decoder.enabled": false,
   "media.gmp.encoder.enabled": false,
-  "dom.serviceWorkers.enabled": false
+  "dom.serviceWorkers.enabled": false,
+  "devtools.jsonview.enabled": false,
+  "network.http.http3.enable": false,
+  "network.http.sanitize-headers-in-logs": true,
+  "network.proxy.type": 1,
+  "network.proxy.http": "127.0.0.1",
+  "network.proxy.http_port": 9,
+  "network.proxy.ssl": "127.0.0.1",
+  "network.proxy.ssl_port": 9,
+  "network.proxy.no_proxies_on": "",
+  "network.proxy.allow_hijacking_localhost": true,
+  "network.proxy.allow_bypass": false,
+  "network.trr.mode": 5
 }

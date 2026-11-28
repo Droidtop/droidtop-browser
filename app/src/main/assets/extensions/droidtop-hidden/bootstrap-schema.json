@@ -2,6 +2,13 @@
   {"namespace": "droidtopHiddenBootstrap", "functions": [
     {"name": "attest", "type": "function", "async": true, "parameters": [
       {"name": "profile", "type": "string"}, {"name": "expected", "type": "string"}
-    ]}
+    ]},
+    {"name":"register","type":"function","async":true,"parameters":[{"name":"contextId","type":"string"},{"name":"timeoutMs","type":"integer"},{"name":"proxyJson","type":"string"}]},
+    {"name":"unregister","type":"function","async":true,"parameters":[{"name":"contextId","type":"string"}]},
+    {"name":"pending","type":"function","async":true,"parameters":[]},
+    {"name":"authorize","type":"function","async":true,"parameters":[{"name":"id","type":"string"},{"name":"allowed","type":"boolean"}]},
+    {"name":"info","type":"function","async":true,"parameters":[{"name":"contextId","type":"string"}]},
+    {"name":"tab","type":"function","async":true,"parameters":[{"name":"contextId","type":"string"}]},
+    {"name":"abortAll","type":"function","async":true,"parameters":[]}
   ]}
 ]

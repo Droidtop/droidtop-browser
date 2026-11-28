@@ -65,8 +65,9 @@ internal object HiddenRuntimeBootstrap {
             append("env:\n  MOZ_ANDROID_CONTENT_SERVICE_ISOLATED_PROCESS: '1'\nprefs:\n")
             prefs.keys().asSequence().sorted().forEach { key ->
                 val value = prefs.get(key)
-                check(key.matches(Regex("[a-zA-Z0-9._-]+")) && (value is Boolean || value is Int))
-                append("  ").append(key).append(": ").append(value).append('\n')
+                check(key.matches(Regex("[a-zA-Z0-9._-]+")) && (value is Boolean || value is Int || value is String))
+                // JSON quoted strings are YAML-compatible; never emit unquoted proxy host values.
+                append("  ").append(key).append(": ").append(if (value is String) JSONObject.quote(value) else value).append('\n')
             }
         }
         val atomic = AtomicFile(config)
@@ -105,7 +106,9 @@ internal object HiddenRuntimeBootstrap {
             // that native prefs/profile took effect; verify them through the installed privileged extension.
             created.webExtensionController.ensureBuiltIn(URL, ID).accept({ extension ->
                 if (extension == null) { fail(IllegalStateException("Restricted bootstrap extension unavailable")); return@accept }
-                extension.setMessageDelegate(object : WebExtension.MessageDelegate {
+                created.webExtensionController.setAllowedInPrivateBrowsing(extension, true).accept({ allowed ->
+                if (allowed == null) { fail(IllegalStateException("Restricted private extension unavailable")); return@accept }
+                allowed.setMessageDelegate(object : WebExtension.MessageDelegate {
                     override fun onConnect(port: WebExtension.Port) {
                         if (finished) { port.disconnect(); return }
                         port.setDelegate(object : WebExtension.PortDelegate {
@@ -118,13 +121,22 @@ internal object HiddenRuntimeBootstrap {
                                     GeckoProcessManager.getInstance().isIsolatedProcessEnabled
                                 if (!matched) { fail(IllegalStateException("Restricted runtime attestation failed")); return }
                                 finished = true
-                                done(Result.success(Ready(created, extension, plan.profile, port)))
+                                done(Result.success(Ready(created, allowed, plan.profile, port)))
                             }
-                            override fun onDisconnect(port: WebExtension.Port) { fail(IllegalStateException("Restricted bootstrap extension disconnected")) }
+                            override fun onDisconnect(port: WebExtension.Port) {
+                                val error = IllegalStateException("Restricted bootstrap extension disconnected")
+                                if (finished) {
+                                    // A formerly attested runtime must never be handed out after its guard port dies.
+                                    cached = null
+                                    failure = error
+                                    runCatching { created.shutdown() }
+                                } else fail(error)
+                            }
                         })
                         port.postMessage(JSONObject(mapOf("op" to "attest", "profile" to plan.profile.canonicalPath, "prefs" to plan.prefs)))
                     }
                 }, "droidtop-hidden")
+                }, { error -> fail(error ?: IllegalStateException("Restricted private extension setup failed")) })
             }, { failure -> fail(failure ?: IllegalStateException("Restricted extension install failed")) })
         })
     }
