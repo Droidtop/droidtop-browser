@@ -1,5 +1,7 @@
 package dev.droidtop.browser
 
+import dev.droidtop.shared.net.BoundedStreamCopy
+
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
@@ -80,17 +82,8 @@ internal class RemoteWebDownloads(private val emit: (String, String, String) -> 
             val output = ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])
             try {
                 offer.response.body.useStream { input ->
-                    val buffer = ByteArray(32 * 1024)
-                    var total = 0L
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        if (count == 0) continue
-                        total += count
-                        check(total <= MAX_BYTES) { "Download exceeded size limit" }
-                        output.write(buffer, 0, count)
-                        offer.progressed = SystemClock.uptimeMillis()
-                    }
+                    BoundedStreamCopy.copy(input, output, MAX_BYTES,
+                        progress = { offer.progressed = SystemClock.uptimeMillis() })
                 }
                 output.close()
             } catch (failure: Exception) {

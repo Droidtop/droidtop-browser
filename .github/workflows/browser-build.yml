@@ -34,6 +34,13 @@ jobs:
           ref: e1c1ea8471766a0d4c19b231769bca5fbd578a62
           path: shared-plugins
 
+      - name: Pinned shared network policy and bounded transfer
+        uses: actions/checkout@v5
+        with:
+          repository: mytop-project/mytop-net
+          ref: 191347cdff52947b7c029ac5f6745b85034e62c4
+          path: shared-net
+
       # The adapter against droidtop's web.view contract (docs/contracts/web-view.json at the droidtop commit in
       # mytop-project/droidtop.pin), before the long build: droidtop checks its own side against the same file.
       - name: web.view contract
@@ -70,6 +77,8 @@ jobs:
           rsync -a --exclude .git recipe/ src/
           mkdir -p src/droidtop/vendor/mytop-plugins
           rsync -a --exclude .git shared-plugins/ src/droidtop/vendor/mytop-plugins/
+          mkdir -p src/droidtop/vendor/mytop-net
+          rsync -a --exclude .git shared-net/ src/droidtop/vendor/mytop-net/
           cd src && bash droidtop/apply.sh
 
       - name: Java

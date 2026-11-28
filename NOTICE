@@ -10,3 +10,7 @@ combining its files with GPL-licensed files (MPL 2.0, section 3.3).
 
 Firefox and Mozilla are trademarks of the Mozilla Foundation. This browser is not made or endorsed by
 Mozilla; droidtop/apply.sh replaces the Firefox name in the user interface.
+
+Bounded transfer and SiteCheck sources are consumed from mytop-project/mytop-net at the exact
+commit pinned in browser-build.yml. Those sources retain their GNU GPL version 3 or later
+license; the complete upstream license and notices remain in droidtop/vendor/mytop-net.

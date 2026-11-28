@@ -45,6 +45,12 @@ sed -i 's#android:name=".FenixApplication"#android:name="dev.droidtop.browser.Dr
 # droidtop's AIDL where the build compiles AIDL by default (see build.part.gradle).
 mkdir -p app/src/main/aidl
 cp -R droidtop/vendor/mytop-plugins/android/aidl/. app/src/main/aidl/
+# Compile the canonical shared sources through the default Android source tree; keep
+# transfer mechanics and challenge classification identical to Droidtop's consumers.
+[ -f droidtop/vendor/mytop-net/net/src/main/kotlin/dev/droidtop/shared/net/BoundedStreamCopy.kt ] || { echo "apply.sh: pinned mytop-net source is missing" >&2; exit 1; }
+mkdir -p app/src/main/java/dev/droidtop/shared/net
+cp droidtop/vendor/mytop-net/net/src/main/kotlin/dev/droidtop/shared/net/BoundedStreamCopy.kt app/src/main/java/dev/droidtop/shared/net/
+cp -R droidtop/vendor/mytop-net/sitecheck/src/main/kotlin/dev/droidtop/shared/sitecheck app/src/main/java/dev/droidtop/shared/
 if ! grep -q 'dev.droidtop.browser.DroidtopInterfaceService' "$manifest"; then
     cat droidtop/build.part.gradle >> "$gradle"
     python3 - "$manifest" droidtop/AndroidManifest.part.xml <<'PY'
