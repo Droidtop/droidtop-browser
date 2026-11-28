@@ -9,7 +9,9 @@ const guardSource = fs.readFileSync(path.join(base, "channel-guard.js"), "utf8")
 const cookieSource = fs.readFileSync(path.join(base, "../droidtop/session-api.js"), "utf8");
 function instance(profile, actual, defaults = required, engineVersion = "160.0.1") {
   const locks = [];
-  const scope = { ExtensionAPI: class {}, Ci: { nsIFile: {} },
+  const scope = { ExtensionAPI: class {
+    constructor(extension) { assert.equal(typeof extension?.once, "function"); this.extension = extension; extension.once("shutdown", () => {}); }
+  }, Ci: { nsIFile: {} },
     Cc: { "@mozilla.org/network/protocol-proxy-service;1": { getService() { return { newProxyInfo() { return {}; }, registerChannelFilter() {} }; } } },
     ChromeUtils: { generateQI() { return function() { return this; }; }, importESModule() { return { setTimeout, clearTimeout }; } }, Services: {
     scriptloader: { loadSubScript(url) { vm.runInContext(url.endsWith("session-api.js") ? cookieSource : guardSource, scope); } },
@@ -30,7 +32,7 @@ function instance(profile, actual, defaults = required, engineVersion = "160.0.1
     },
   } };
   vm.createContext(scope); vm.runInContext(source, scope);
-  return { api: new scope.droidtopHiddenBootstrap().getAPI().droidtopHiddenBootstrap, locks };
+  return { api: new scope.droidtopHiddenBootstrap({ once() {} }).getAPI().droidtopHiddenBootstrap, locks };
 }
 (async () => {
   const owned = "/data/user/0/dev.droidtop.browser/no_backup/droidtop-web-runtime/profile";

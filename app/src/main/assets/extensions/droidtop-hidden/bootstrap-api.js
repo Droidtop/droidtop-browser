@@ -13,7 +13,7 @@ this.droidtopHiddenBootstrap = class extends ExtensionAPI {
   onShutdown() { this.guard.close(); }
   getAPI(context) {
     const guard = this.guard;
-    const cookies = new droidtopSessionCookies().getAPI().droidtopSessionCookies;
+    const cookies = new droidtopSessionCookies(this.extension).getAPI().droidtopSessionCookies;
     return { droidtopHiddenBootstrap: {
       async attest(expectedProfile, encodedPrefs) {
         const profile = Services.dirsvc.get("ProfD", Ci.nsIFile);
