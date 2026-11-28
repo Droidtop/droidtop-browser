@@ -103,6 +103,14 @@ internal class HiddenDocumentEngine(private val context: Context, private val re
             if (!job.claimed.compareAndSet(false, true) || job.cancelled.get()) return null
             val pipe = ParcelFileDescriptor.createReliablePipe()
             job.writer = pipe[1]
+            // Cancellation may win between the first flag check and FD publication. Once the
+            // writer is published, either remove() owns it or this recheck closes both ends;
+            // a queued worker must never be the only owner of a late, uncancelled descriptor.
+            if (job.cancelled.get()) {
+                runCatching { pipe[0].close() }
+                runCatching { pipe[1].closeWithError("Restricted document closed") }
+                return null
+            }
             try {
                 workers.execute {
                     val output = ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])
@@ -114,7 +122,8 @@ internal class HiddenDocumentEngine(private val context: Context, private val re
                     finally { runCatching { output.close() }; main.post { remove(job) } }
                 }
             } catch (busy: java.util.concurrent.RejectedExecutionException) {
-                pipe[0].close(); pipe[1].closeWithError("Restricted transfer is busy")
+                runCatching { pipe[0].close() }
+                runCatching { pipe[1].closeWithError("Restricted transfer is busy") }
                 main.post { remove(job) }
                 return null
             }
