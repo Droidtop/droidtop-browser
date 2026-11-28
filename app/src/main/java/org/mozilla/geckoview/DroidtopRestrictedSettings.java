@@ -12,6 +12,14 @@ public final class DroidtopRestrictedSettings {
 
     public static GeckoRuntimeSettings apply(
             GeckoRuntimeSettings settings, Map<String, Object> required) {
+        Object port = required.get("network.proxy.ssl_port");
+        if (!(port instanceof Integer) || (Integer) port < 1024 || (Integer) port > 65535
+                || !port.equals(required.get("network.proxy.http_port"))
+                || !"127.0.0.1".equals(required.get("network.proxy.http"))
+                || !"127.0.0.1".equals(required.get("network.proxy.ssl"))
+                || !Integer.valueOf(1).equals(required.get("network.proxy.type"))) {
+            throw new IllegalStateException("An owned startup proxy was not configured");
+        }
         for (Map.Entry<String, Object> entry : required.entrySet()) {
             final String key = entry.getKey();
             final Object value = entry.getValue();

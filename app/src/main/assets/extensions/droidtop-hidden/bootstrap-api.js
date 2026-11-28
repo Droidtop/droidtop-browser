@@ -25,8 +25,9 @@ this.droidtopHiddenBootstrap = class extends ExtensionAPI {
         const defaults = Services.prefs.getDefaultBranch("");
         for (const [key, wanted] of Object.entries(required)) {
           try {
-            // A user value for an unknown/removed preference would otherwise falsely attest a restriction that
-            // this engine does not implement. The pinned engine must declare a default for every required key.
+            // Check that native startup retained a typed default. Startup injection itself defines
+            // defaults: this is NOT independent proof the engine implements a preference. Required
+            // keys and conditional build flags are verified against the pinned Gecko source.
             if (defaults.getPrefType(key) === 0) { ok = false; continue; }
             actual[key] = typeof wanted === "boolean" ? Services.prefs.getBoolPref(key) : typeof wanted === "string" ? Services.prefs.getStringPref(key) : Services.prefs.getIntPref(key);
             if (actual[key] !== wanted) ok = false;

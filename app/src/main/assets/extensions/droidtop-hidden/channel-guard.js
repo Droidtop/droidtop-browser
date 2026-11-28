@@ -10,7 +10,7 @@ this.HiddenChannels = class {
     this.ready = false;
     this.proxies = Cc["@mozilla.org/network/protocol-proxy-service;1"].getService(Ci.nsIProtocolProxyService);
     // A non-null dead-end proxy is mandatory: null means DIRECT to Gecko.
-    this.blockedProxy = this.proxies.newProxyInfo("http", "127.0.0.1", 9, "", "droidtop-denied", 0, 0, null);
+    this.blockedProxy = this.proxies.newProxyInfo("http", "127.0.0.1", Services.prefs.getIntPref("network.proxy.ssl_port"), "", "droidtop-denied", 0, 0, null);
     this.proxyFilter = {
       QueryInterface: ChromeUtils.generateQI(["nsIProtocolProxyChannelFilter"]),
       applyFilter: (channel, previous, callback) => {

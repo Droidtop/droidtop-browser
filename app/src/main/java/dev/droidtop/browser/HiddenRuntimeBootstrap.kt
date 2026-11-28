@@ -55,7 +55,7 @@ internal object HiddenRuntimeBootstrap {
             main.postDelayed({ if (starting) complete(Result.failure(IllegalStateException("Restricted browser startup timed out"))) }, 15_000)
             files.execute {
                 runCatching { prepare(context) }.fold(
-                    onSuccess = { plan -> main.post { if (starting) launch(context, plan, ::complete) } },
+                    onSuccess = { plan -> main.post { if (starting) launch(context, plan, ::complete) else plan.sink.close() } },
                     onFailure = { error -> main.post { if (starting) complete(Result.failure(error)) } },
                 )
             }
@@ -74,7 +74,7 @@ internal object HiddenRuntimeBootstrap {
         callbacks.forEach { it(result) }
     }
 
-    private data class Plan(val profile: File, val prefs: JSONObject)
+    private data class Plan(val profile: File, val prefs: JSONObject, val sink: RejectingProxy)
 
     private fun prepare(context: Context): Plan {
         val root = File(context.noBackupFilesDir, "droidtop-web-runtime").canonicalFile
@@ -104,7 +104,18 @@ internal object HiddenRuntimeBootstrap {
             val value = prefs.get(key)
             check(key.matches(Regex("[a-zA-Z0-9._-]+")) && (value is Boolean || value is Int || value is String))
         }
-        return Plan(profile, prefs)
+        // Reserve our own reject-only endpoint before Gecko starts. A conventional "closed" port
+        // could belong to a different local service and must never serve as a security boundary.
+        val sink = RejectingProxy.open()
+        try {
+            check(sink.port() in 1024..65535)
+            prefs.put("network.proxy.http_port", sink.port())
+            prefs.put("network.proxy.ssl_port", sink.port())
+            return Plan(profile, prefs, sink)
+        } catch (failure: Exception) {
+            sink.close()
+            throw failure
+        }
     }
 
     private fun launch(context: Context, plan: Plan, done: (Result<Ready>) -> Unit) {
@@ -130,6 +141,11 @@ internal object HiddenRuntimeBootstrap {
         }.fold(onFailure = ::fail, onSuccess = { created ->
             runtime = created
             launching = created
+            created.delegate = object : GeckoRuntime.Delegate {
+                // Keep the port reserved until the native runtime is actually gone, not merely
+                // after requesting shutdown. Process retirement also closes it at the OS boundary.
+                override fun onShutdown() { plan.sink.close() }
+            }
             // The source-pinned adapter supplied restrictions before native startup. Independently verify
             // the resulting native profile/preferences through the installed privileged extension.
             created.webExtensionController.ensureBuiltIn(URL, ID).accept({ extension ->

@@ -15,7 +15,7 @@ const scope = {
   Cc: { "@mozilla.org/network/protocol-proxy-service;1": { getService() { return {
     newProxyInfo(...args) { return { args }; }, registerChannelFilter() {}, unregisterChannelFilter() {},
   }; } } },
-  Services: { obs: { addObserver() {} } },
+  Services: { obs: { addObserver() {} }, prefs: { getIntPref() { return 45679; } } },
   Ci: { nsIHttpChannel: {}, nsIContentPolicy: { TYPE_DOCUMENT: 1, TYPE_SUBDOCUMENT: 2 } },
   Cr: { NS_BINDING_ABORTED: "cancelled" },
   Date: { now: () => clock },
@@ -24,6 +24,7 @@ const scope = {
 };
 vm.createContext(scope); vm.runInContext(source, scope);
 const guard = new scope.HiddenChannels(); guard.ready = true;
+assert.equal(guard.blockedProxy.args[2], 45679, "fallback must use the owned reserved sink port");
 assert.equal(guard.register(first, 30000, proxy), true);
 function channel(context = first, type = 9) {
   const events = [];

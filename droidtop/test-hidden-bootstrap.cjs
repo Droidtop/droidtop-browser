@@ -57,5 +57,10 @@ function instance(profile, actual, defaults = required, engineVersion = "160.0.1
   assert.equal(required["network.http.speculative-parallel-limit"], 0);
   assert.equal(required["network.dns.disablePrefetch"], true);
   assert.equal(required["media.peerconnection.enabled"], false);
+  assert.equal(required["network.proxy.failover_direct"], false);
+  assert.equal(required["network.proxy.allow_bypass"], false);
+  assert.equal(required["network.proxy.type"], 1);
+  assert.equal(required["network.connectivity-service.enabled"], false);
+  assert.equal(required["network.captive-portal-service.enabled"], false);
   console.log("Restricted bootstrap: exact profile, all pref mismatches and lock-only-after-match pass");
 })().catch(error => { console.error(error); process.exitCode = 1; });

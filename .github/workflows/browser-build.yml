@@ -88,6 +88,12 @@ jobs:
           java-version: 17
           distribution: temurin
 
+      - name: Reject-only startup proxy test
+        run: |
+          mkdir -p "$RUNNER_TEMP/reject-proxy-test"
+          javac --release 17 -d "$RUNNER_TEMP/reject-proxy-test" recipe/app/src/main/java/dev/droidtop/browser/RejectingProxy.java recipe/droidtop/RejectingProxyTest.java
+          java -cp "$RUNNER_TEMP/reject-proxy-test" dev.droidtop.browser.RejectingProxyTest
+
       - name: Android SDK and the NDK Gradle skips
         working-directory: src
         run: ./automation/iceraven/install-sdk.sh

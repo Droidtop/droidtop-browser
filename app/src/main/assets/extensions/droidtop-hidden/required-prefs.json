@@ -25,5 +25,11 @@
   "network.proxy.no_proxies_on": "",
   "network.proxy.allow_hijacking_localhost": true,
   "network.proxy.allow_bypass": false,
-  "network.trr.mode": 5
+  "network.proxy.failover_direct": false,
+  "network.trr.mode": 5,
+  "network.connectivity-service.enabled": false,
+  "network.connectivity-service.nat64-check": false,
+  "network.captive-portal-service.enabled": false,
+  "network.trr.preconnect_on_foreground": false,
+  "network.dns.use_https_rr_as_altsvc": false
 }
