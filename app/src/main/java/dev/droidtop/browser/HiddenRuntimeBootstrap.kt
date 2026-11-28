@@ -3,13 +3,13 @@ package dev.droidtop.browser
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.util.AtomicFile
 import java.io.File
 import java.util.concurrent.Executors
 import org.json.JSONObject
 import org.mozilla.gecko.process.GeckoProcessManager
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
+import org.mozilla.geckoview.DroidtopRestrictedSettings
 import org.mozilla.geckoview.WebExtension
 
 /** Only the dedicated process may create this runtime. No ordinary Fenix components/default runtime access. */
@@ -52,7 +52,7 @@ internal object HiddenRuntimeBootstrap {
         callbacks.forEach { it(result) }
     }
 
-    private data class Plan(val profile: File, val config: File, val prefs: JSONObject)
+    private data class Plan(val profile: File, val prefs: JSONObject)
 
     private fun prepare(context: Context): Plan {
         val root = File(context.noBackupFilesDir, "droidtop-web-runtime").canonicalFile
@@ -60,26 +60,11 @@ internal object HiddenRuntimeBootstrap {
         val profile = File(root, "profile").canonicalFile
         check(profile.parentFile == root && (profile.mkdirs() || profile.isDirectory))
         val prefs = context.assets.open("extensions/droidtop-hidden/required-prefs.json").bufferedReader().use { JSONObject(it.readText()) }
-        val config = File(root, "restricted.yaml")
-        val text = buildString {
-            append("env:\n  MOZ_ANDROID_CONTENT_SERVICE_ISOLATED_PROCESS: '1'\nprefs:\n")
-            prefs.keys().asSequence().sorted().forEach { key ->
-                val value = prefs.get(key)
-                check(key.matches(Regex("[a-zA-Z0-9._-]+")) && (value is Boolean || value is Int || value is String))
-                // JSON quoted strings are YAML-compatible; never emit unquoted proxy host values.
-                append("  ").append(key).append(": ").append(if (value is String) JSONObject.quote(value) else value).append('\n')
-            }
+        prefs.keys().asSequence().forEach { key ->
+            val value = prefs.get(key)
+            check(key.matches(Regex("[a-zA-Z0-9._-]+")) && (value is Boolean || value is Int || value is String))
         }
-        val atomic = AtomicFile(config)
-        val output = atomic.startWrite()
-        try {
-            output.write(text.toByteArray(Charsets.UTF_8))
-            atomic.finishWrite(output)
-        } catch (failure: Exception) {
-            atomic.failWrite(output)
-            throw failure
-        }
-        return Plan(profile, config, prefs)
+        return Plan(profile, prefs)
     }
 
     private fun launch(context: Context, plan: Plan, done: (Result<Ready>) -> Unit) {
@@ -93,17 +78,20 @@ internal object HiddenRuntimeBootstrap {
         }
         main.postDelayed({ fail(IllegalStateException("Restricted browser startup timed out")) }, 15_000)
         runCatching {
-            GeckoRuntime.create(context, GeckoRuntimeSettings.Builder()
+            val settings = GeckoRuntimeSettings.Builder()
                 .arguments(arrayOf("-profile", plan.profile.absolutePath))
-                .configFilePath(plan.config.absolutePath)
+                // Explicitly disable the optional debug-config parser: it catches/ignores errors.
+                .configFilePath("")
                 .isolatedProcessEnabled(true)
                 .extensionsProcessEnabled(false)
                 .crashHandler(null)
-                .build())
+                .build()
+            val required = plan.prefs.keys().asSequence().associateWith { plan.prefs.get(it) }
+            GeckoRuntime.create(context, DroidtopRestrictedSettings.apply(settings, required))
         }.fold(onFailure = ::fail, onSuccess = { created ->
             runtime = created
-            // The config file loader can silently ignore a missing/invalid file. A settings object is not proof
-            // that native prefs/profile took effect; verify them through the installed privileged extension.
+            // The source-pinned adapter supplied restrictions before native startup. Independently verify
+            // the resulting native profile/preferences through the installed privileged extension.
             created.webExtensionController.ensureBuiltIn(URL, ID).accept({ extension ->
                 if (extension == null) { fail(IllegalStateException("Restricted bootstrap extension unavailable")); return@accept }
                 created.webExtensionController.setAllowedInPrivateBrowsing(extension, true).accept({ allowed ->
