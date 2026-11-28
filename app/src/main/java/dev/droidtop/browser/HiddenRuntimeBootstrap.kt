@@ -26,6 +26,14 @@ internal object HiddenRuntimeBootstrap {
 
     data class Ready(val runtime: GeckoRuntime, val extension: WebExtension, val profile: File, val port: WebExtension.Port)
 
+    fun invalidate(ready: Ready) {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (cached !== ready) return
+        cached = null
+        failure = IllegalStateException("Restricted runtime guard disconnected")
+        runCatching { ready.runtime.shutdown() }
+    }
+
     /** Completion is bounded and occurs on main. No session or network document may start before Ready. */
     fun start(context: Context, done: (Result<Ready>) -> Unit) {
         check(HiddenProcess.owns(context)) { "Restricted runtime requested outside its owned process" }
