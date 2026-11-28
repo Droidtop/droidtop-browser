@@ -4,7 +4,7 @@
 "use strict";
 
 function attributes(contextId) {
-  if (!/^droidtop-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(contextId)) {
+  if (!/^droidtop-(?:hidden-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(contextId)) {
     throw new Error("invalid session context");
   }
   // StorageController.createSafeSessionContextId uses BigInteger(UTF8).toString(16); our ASCII prefix has no

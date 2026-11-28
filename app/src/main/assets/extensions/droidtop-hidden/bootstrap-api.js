@@ -4,6 +4,8 @@ const hiddenTimers = ChromeUtils.importESModule("resource://gre/modules/Timer.sy
 this.setTimeout = hiddenTimers.setTimeout;
 this.clearTimeout = hiddenTimers.clearTimeout;
 Services.scriptloader.loadSubScript("resource://android/assets/extensions/droidtop-hidden/channel-guard.js", this);
+// Reuse the same exact-context cookie implementation; no second jar policy or regex copy.
+Services.scriptloader.loadSubScript("resource://android/assets/extensions/droidtop/session-api.js", this);
 
 /* Runs only in the separately owned profile/process. Never change preferences in the ordinary Browser runtime. */
 this.droidtopHiddenBootstrap = class extends ExtensionAPI {
@@ -11,6 +13,7 @@ this.droidtopHiddenBootstrap = class extends ExtensionAPI {
   onShutdown() { this.guard.close(); }
   getAPI(context) {
     const guard = this.guard;
+    const cookies = new droidtopSessionCookies().getAPI().droidtopSessionCookies;
     return { droidtopHiddenBootstrap: {
       async attest(expectedProfile, encodedPrefs) {
         const profile = Services.dirsvc.get("ProfD", Ci.nsIFile);
@@ -51,6 +54,16 @@ this.droidtopHiddenBootstrap = class extends ExtensionAPI {
       async authorize(id, allowed) { guard.authorize(id, allowed); },
       async info(contextId) { return guard.info(contextId); },
       async abortAll() { guard.abortAll(); },
+      async cookies(contextId, op, host, header) {
+        const scope = guard.scopes.get(guard.safe(contextId));
+        if (!guard.ready || !scope || scope.expires <= Date.now()) throw new Error("closed cookie context");
+        // The native controller supplies the immutable initial host only. Bind its first use
+        // to the context and reject later widening; all import/export remains in this runtime.
+        if (!scope.cookieHost) scope.cookieHost = domainName(host);
+        if (scope.cookieHost !== domainName(host)) throw new Error("cookie host changed");
+        if (!['set', 'get', 'clear'].includes(op) || typeof header !== 'string' || header.length > 16384 || /[\u0000-\u001f\u007f]/.test(header)) throw new Error("invalid cookie operation");
+        return cookies.call(contextId, op, JSON.stringify(op === 'set' ? { cookies: { [host]: header } } : { domains: [host] }));
+      },
       async tab(contextId) {
         const safe = guard.safe(contextId);
         if (!guard.ready || !guard.scopes.has(safe)) return -1;

@@ -10,5 +10,6 @@
     {"name":"info","type":"function","async":true,"parameters":[{"name":"contextId","type":"string"}]},
     {"name":"tab","type":"function","async":true,"parameters":[{"name":"contextId","type":"string"}]},
     {"name":"abortAll","type":"function","async":true,"parameters":[]}
+    ,{"name":"cookies","type":"function","async":true,"parameters":[{"name":"contextId","type":"string"},{"name":"op","type":"string"},{"name":"host","type":"string"},{"name":"header","type":"string"}]}
   ]}
 ]

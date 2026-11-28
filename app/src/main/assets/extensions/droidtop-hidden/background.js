@@ -23,6 +23,7 @@ function connect() {
         let result;
         if (message.op === "register") result = { registered: await browser.droidtopHiddenBootstrap.register(message.contextId, message.timeoutMs, JSON.stringify(message.proxy)) };
         else if (message.op === "unregister") { await browser.droidtopHiddenBootstrap.unregister(message.contextId); result = {}; }
+        else if (message.op === "cookies") result = JSON.parse(await browser.droidtopHiddenBootstrap.cookies(message.contextId, message.cookieOp, message.host, message.header || ""));
         else if (message.op === "snapshot") {
           const info = JSON.parse(await browser.droidtopHiddenBootstrap.info(message.contextId));
           if (info.denied) result = { ...info, error: "permission_denied" };

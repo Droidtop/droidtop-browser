@@ -6,12 +6,13 @@ const base = path.join(__dirname, "../app/src/main/assets/extensions/droidtop-hi
 const required = JSON.parse(fs.readFileSync(path.join(base, "required-prefs.json"), "utf8"));
 const source = fs.readFileSync(path.join(base, "bootstrap-api.js"), "utf8");
 const guardSource = fs.readFileSync(path.join(base, "channel-guard.js"), "utf8");
+const cookieSource = fs.readFileSync(path.join(base, "../droidtop/session-api.js"), "utf8");
 function instance(profile, actual, defaults = required, engineVersion = "160.0.1") {
   const locks = [];
   const scope = { ExtensionAPI: class {}, Ci: { nsIFile: {} },
     Cc: { "@mozilla.org/network/protocol-proxy-service;1": { getService() { return { newProxyInfo() { return {}; }, registerChannelFilter() {} }; } } },
     ChromeUtils: { generateQI() { return function() { return this; }; }, importESModule() { return { setTimeout, clearTimeout }; } }, Services: {
-    scriptloader: { loadSubScript() { vm.runInContext(guardSource, scope); } },
+    scriptloader: { loadSubScript(url) { vm.runInContext(url.endsWith("session-api.js") ? cookieSource : guardSource, scope); } },
     obs: { addObserver() {} },
     dirsvc: { get() { return { path: profile, normalize() {} }; } },
     appinfo: { platformVersion: engineVersion },
