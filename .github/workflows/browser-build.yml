@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: mytop-project/mytop-plugins
-          ref: e1c1ea8471766a0d4c19b231769bca5fbd578a62
+          ref: 07aa739fcefdab02f70e017811e0336cfffc65ab
           path: shared-plugins
 
       - name: Pinned shared network policy and bounded transfer

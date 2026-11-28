@@ -8,6 +8,12 @@
             </intent-filter>
         </service>
 
+        <!-- Explicitly private forwarding target; never shares the ordinary Gecko profile/runtime. -->
+        <service
+            android:name="dev.droidtop.browser.HiddenEngineService"
+            android:process=":droidtop_web"
+            android:exported="false" />
+
         <!-- A page droidtop asks the browser to show: a sign-in, a browser check or a download page, by one-use token. -->
         <activity
             android:name="dev.droidtop.browser.WebViewActivity"

@@ -31,7 +31,7 @@ def main() -> int:
         print("no adapter sources under app/src/main/java/dev/droidtop/browser")
         return 1
     # Restricted-runtime bootstrap attestation is an app-internal protocol, not a web.view broker payload.
-    internal_names = {"HiddenRuntimeBootstrap.kt", "HiddenPort.kt"}
+    internal_names = {"HiddenRuntimeBootstrap.kt", "HiddenPort.kt", "HiddenDocumentEngine.kt", "HiddenEngineConnection.kt", "HiddenEngineService.kt"}
     for p in sources:
         if p.name in internal_names and "DroidtopLink.call" in p.read_text(encoding="utf-8"):
             raise ValueError("internal bootstrap must not call the web.view broker")

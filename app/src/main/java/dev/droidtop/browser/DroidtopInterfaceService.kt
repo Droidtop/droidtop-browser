@@ -42,11 +42,14 @@ class DroidtopInterfaceService : Service() {
     private class Runtime(private val context: Context) : IPluginRuntime.Stub() {
         private val remotes = CopyOnWriteArrayList<RemoteWebView>()
         private val bodyEndpoints = CopyOnWriteArrayList<WebDownloadEndpoint>()
+        private val hiddenEndpoints = CopyOnWriteArrayList<HiddenEngineConnection>()
         fun dispose() {
             remotes.toList().forEach { it.disconnect() }
             remotes.clear()
             bodyEndpoints.toList().forEach { it.disconnect() }
             bodyEndpoints.clear()
+            hiddenEndpoints.toList().forEach { it.close() }
+            hiddenEndpoints.clear()
         }
         private fun caller(): Boolean = DroidtopLink.isDroidtop(context, Binder.getCallingUid()).also {
             if (!it) Log.w(TAG, "refused a call from uid ${Binder.getCallingUid()}: not droidtop")
@@ -100,6 +103,15 @@ class DroidtopInterfaceService : Service() {
         override fun cancelJob(pluginId: String?, jobId: String?) {}
         override fun attachRelay(pluginId: String?, name: String?, relay: IBinder?) {
             if (!caller() || pluginId == null || !DroidtopLink.hasPlugin(pluginId) || relay == null) return
+            if (name == HiddenEngineConnection.RELAY) {
+                // Joint source/CI review must explicitly enable the new networking capability.
+                if (!HIDDEN_DOCUMENT_ENABLED || Build.VERSION.SDK_INT < 30 || hiddenEndpoints.size >= 16) return
+                HiddenEngineConnection(context, pluginId, relay, disposed = { hiddenEndpoints.remove(it) }).also {
+                    hiddenEndpoints += it
+                    it.connect()
+                }
+                return
+            }
             if (name == WebDownloadEndpoint.RELAY) {
                 if (bodyEndpoints.size >= 16) return
                 WebDownloadEndpoint(context, pluginId, IWebDownloadHost.Stub.asInterface(relay),
@@ -122,6 +134,7 @@ class DroidtopInterfaceService : Service() {
 
     companion object {
         const val ACTION = "dev.droidtop.plugin.APP_INTERFACE"
+        private const val HIDDEN_DOCUMENT_ENABLED = false
         internal const val TAG = "DroidtopBrowser"
 
         private fun error(code: String, message: String): String =
