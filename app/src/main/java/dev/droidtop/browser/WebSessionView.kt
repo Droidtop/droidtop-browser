@@ -297,9 +297,14 @@ internal class WebSessionView(
         // A bounded basename is metadata only. The host independently validates it and owns every destination path.
         val name = fileName.orEmpty().substringAfterLast('/').substringAfterLast('\\')
             .replace(Regex("[^\\p{L}\\p{N} ._()\\-]"), "_").trim(' ', '.').take(48).ifEmpty { "download" }
+        // Gecko forwards the original Content-Length header while its body may be decoded.
+        // That wire length is not an exact length for gzip/br/etc. The shared copier/host still
+        // enforce the actual byte cap and reliable EOF; do not label valid decoded data short/excess.
+        val encoding = response.headers["Content-Encoding"]?.trim().orEmpty()
+        val bodySize = size?.takeIf { it >= 0 && (encoding.isEmpty() || encoding.equals("identity", ignoreCase = true)) } ?: -1L
         val metadata = JSONObject().put("sourceUrl", sourceUrl).put("fileName", name)
             .put("mimeType", mimeType.orEmpty().filterNot { it.isISOControl() }.take(256))
-            .put("size", size?.takeIf { it >= 0 } ?: -1L)
+            .put("size", bodySize)
         pendingDownloads++
         val offered = sink.offer(given, metadata, response) { id, accepted ->
             pendingDownloads--
