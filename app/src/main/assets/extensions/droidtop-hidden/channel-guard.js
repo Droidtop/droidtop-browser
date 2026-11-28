@@ -45,7 +45,7 @@ this.HiddenChannels = class {
     if (this.scopes.has(safe)) return false;
     if (!proxy || Object.keys(proxy).sort().join(",") !== "authorization,host,isolationKey,port" || proxy.host !== "127.0.0.1" ||
         !Number.isInteger(proxy.port) || proxy.port < 1024 || proxy.port > 65535 ||
-        !/^Bearer [A-Za-z0-9_-]{43}$/.test(proxy.authorization) || !/^[0-9a-f-]{36}$/.test(proxy.isolationKey)) return false;
+        !/^Bearer [A-Za-z0-9_-]{43}$/.test(proxy.authorization) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(proxy.isolationKey)) return false;
     const proxyInfo = this.proxies.newProxyInfo("http", proxy.host, proxy.port, "", proxy.isolationKey, 0, 0, null);
     this.scopes.set(safe, { contextId, proxy, proxyInfo, expires: Date.now() + timeoutMs, pending: 0, denied: false });
     return true;
