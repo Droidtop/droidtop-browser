@@ -38,9 +38,9 @@ internal class HiddenDocumentEngine(private val context: Context) {
     private var port: HiddenPort? = null
     private var closed = false
 
-    fun owner(pluginId: String, host: IWebHiddenHost): Owner = Owner(pluginId, host).also { owners += it }
+    fun owner(pluginId: String, host: IWebHiddenHost, closed: () -> Unit): Owner = Owner(pluginId, host, closed).also { owners += it }
 
-    inner class Owner(private val pluginId: String, val host: IWebHiddenHost) : IWebHiddenProvider.Stub() {
+    inner class Owner(private val pluginId: String, val host: IWebHiddenHost, private val onClosed: () -> Unit) : IWebHiddenProvider.Stub() {
         private val tokens = ConcurrentHashMap<String, Job>()
         private val active = AtomicBoolean(true)
         private var connected = false
@@ -128,6 +128,7 @@ internal class HiddenDocumentEngine(private val context: Context) {
                 runCatching { host.asBinder().unlinkToDeath(death, 0) }
                 tokens.values.toList().forEach { fail(it, "failed", "Restricted host disconnected") }
                 owners.remove(this)
+                onClosed()
             }
         }
 

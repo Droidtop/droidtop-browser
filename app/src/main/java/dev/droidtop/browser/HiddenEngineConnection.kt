@@ -11,6 +11,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
+import android.os.Process
 
 /** Main-process forwarding only; the hidden engine and its profile never live here. */
 internal class HiddenEngineConnection(
@@ -24,6 +25,11 @@ internal class HiddenEngineConnection(
     private var remote: Messenger? = null
     private var bound = false
     private var closed = false
+    private val replies = Messenger(object : Handler(Looper.getMainLooper()) {
+        override fun handleMessage(message: Message) {
+            if (message.sendingUid == Process.myUid() && message.what == CLOSED && message.data.getBinder("lease") == lease) close()
+        }
+    })
 
     fun connect() = main.post {
         if (closed) return@post
@@ -37,6 +43,7 @@ internal class HiddenEngineConnection(
         runCatching {
             remote?.send(Message.obtain(null, ATTACH).apply {
                 data = Bundle().apply { putString("pluginId", pluginId); putBinder("host", host); putBinder("lease", lease) }
+                replyTo = replies
             })
         }.onFailure { close() }
     }
@@ -54,5 +61,5 @@ internal class HiddenEngineConnection(
         disposed(this)
     }
 
-    companion object { const val RELAY = "web.hidden.v1"; const val ATTACH = 1; const val DETACH = 2 }
+    companion object { const val RELAY = "web.hidden.v1"; const val ATTACH = 1; const val DETACH = 2; const val CLOSED = 3 }
 }
