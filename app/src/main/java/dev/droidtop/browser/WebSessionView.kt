@@ -167,6 +167,7 @@ internal class WebSessionView(
         bar.addView(button(if (endsWithDone) "Cancel" else "Close") { finishWith(completed = !endsWithDone) })
         root.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         errorLine = TextView(context).apply {
+            accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
             setTextColor(Color.WHITE)
             setPadding(dp(16), 0, dp(16), dp(6))
             visibility = android.view.View.GONE
@@ -228,6 +229,13 @@ internal class WebSessionView(
             response: mozilla.components.concept.fetch.Response?,
         ) {
             main.post {
+                if (mode != "open") {
+                    response?.close()
+                    if (!answered && alive()) downloadFailure(
+                        "Downloads are not available on this page. Use Droidtop's download action.",
+                        "download_unavailable_here")
+                    return@post
+                }
                 if (response != null) captureBody(response, fileName, contentLength, contentType)
                 else capture(url, fileName, contentLength, contentType, cookie, userAgent)
             }
