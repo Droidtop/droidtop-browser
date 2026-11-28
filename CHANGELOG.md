@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Browser previews and sign-in pages explain when a download needs Droidtop's download action.
+- Downloads that use compression avoid failures caused by an advertised size that differs from the delivered body.
+
 - Activity-based browser pages can transfer actual response bodies on Android 8 and later through an independently negotiated download API.
 
 - Android 11 and later can provide a Browser-owned web view inside Droidtop through a scoped surface API, including navigation status and the existing session/download result boundary.
